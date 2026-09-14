@@ -1,0 +1,346 @@
+{
+  "users": [
+    {
+      "id": "USR-MU12R1ZX-VYPY",
+      "name": "Kanha Mahajan",
+      "email": "kanhamahajan01@gmail.com",
+      "phone": "0000000000",
+      "role": "Admin",
+      "status": "Active",
+      "createdAt": "2026-09-14T10:02:47.901Z"
+    },
+    {
+      "id": "USR-MU13DDZQ-FEFY",
+      "name": "Kanha Mahajan",
+      "email": "nileshkgn1111@gmail.com",
+      "phone": "9876543210",
+      "role": "User",
+      "status": "Active",
+      "createdAt": "2026-09-14T10:20:09.878Z"
+    }
+  ],
+  "warehouses": [
+    {
+      "id": "WH-MU13KGYF-NQ1X",
+      "name": "Amax",
+      "location": "Mumbai, Maharashtra",
+      "totalCapacity": 5000,
+      "availableSpace": 5000,
+      "storageType": "Standard Ambient",
+      "pricePerMonth": 19,
+      "status": "Available",
+      "description": "Prime distribution facility in Mumbai industrial zone with multi-bay loading docks.",
+      "createdAt": "2026-09-14T10:25:40.311Z",
+      "updatedAt": "2026-09-14T10:25:40.311Z"
+    },
+    {
+      "id": "WH-PN10B24X-K981",
+      "name": "Pune Logistics Hub",
+      "location": "Pune, Maharashtra",
+      "totalCapacity": 12000,
+      "availableSpace": 9500,
+      "storageType": "Cold Storage",
+      "pricePerMonth": 28,
+      "status": "Available",
+      "description": "Temperature-controlled cold chain facility for pharmaceuticals and food products (-18°C to +4°C).",
+      "createdAt": "2026-09-14T08:00:00.000Z",
+      "updatedAt": "2026-09-14T08:00:00.000Z"
+    },
+    {
+      "id": "WH-BL12C88Y-M223",
+      "name": "Bangalore Central Fulfillment",
+      "location": "Bangalore, Karnataka",
+      "totalCapacity": 25000,
+      "availableSpace": 18000,
+      "storageType": "Standard Ambient",
+      "pricePerMonth": 22,
+      "status": "Available",
+      "description": "High-throughput multi-bay eCommerce distribution and pallet storage depot near Outer Ring Road.",
+      "createdAt": "2026-09-14T08:00:00.000Z",
+      "updatedAt": "2026-09-14T08:00:00.000Z"
+    }
+  ],
+  "inventory": [
+    {
+      "id": "INV-MU13HLQU-69UK",
+      "userId": "USR-MU13DDZQ-FEFY",
+      "userName": "Kanha Mahajan",
+      "userEmail": "nileshkgn1111@gmail.com",
+      "name": "Industrial pump",
+      "sku": "SKU-871089",
+      "category": "Machinery & Equipment",
+      "description": "Heavy duty industrial centrifugal pump",
+      "quantity": 100,
+      "unit": "Boxes",
+      "weightSize": "25 kg",
+      "storageRequirement": "Standard Ambient",
+      "warehouseId": "WH-MU13KGYF-NQ1X",
+      "warehouseName": "Amax",
+      "status": "In Stock",
+      "lowStockThreshold": 10,
+      "createdAt": "2026-09-14T10:23:26.550Z",
+      "updatedAt": "2026-09-14T10:32:59.682Z"
+    },
+    {
+      "id": "INV-GEN-90214",
+      "userId": "USR-MU13DDZQ-FEFY",
+      "userName": "Kanha Mahajan",
+      "userEmail": "nileshkgn1111@gmail.com",
+      "name": "Copper Pipe Fittings (2-inch)",
+      "sku": "SKU-992144",
+      "category": "Building Materials",
+      "description": "Standard industrial grade copper fittings",
+      "quantity": 450,
+      "unit": "Units",
+      "weightSize": "0.5 kg",
+      "storageRequirement": "Standard Ambient",
+      "warehouseId": "WH-MU13KGYF-NQ1X",
+      "warehouseName": "Amax",
+      "status": "In Stock",
+      "lowStockThreshold": 50,
+      "createdAt": "2026-09-14T09:15:00.000Z",
+      "updatedAt": "2026-09-14T09:15:00.000Z"
+    }
+  ],
+  "bookings": [
+    {
+      "id": "BKG-MU13SRTU-Q6LC",
+      "userId": "USR-MU12R1ZX-VYPY",
+      "userName": "Kanha Mahajan",
+      "userEmail": "kanhamahajan01@gmail.com",
+      "warehouseId": "WH-MU13KGYF-NQ1X",
+      "warehouseName": "Amax",
+      "warehouseLocation": "Mumbai",
+      "requiredSpace": 50,
+      "startDate": "2026-09-14",
+      "endDate": "2026-10-14",
+      "items": [],
+      "estimatedCost": 950,
+      "status": "Cancelled",
+      "createdAt": "2026-09-14T10:32:07.650Z",
+      "updatedAt": "2026-09-14T11:19:24.733Z"
+    },
+    {
+      "id": "BKG-MU13QR9C-1MYG",
+      "userId": "USR-MU13DDZQ-FEFY",
+      "userName": "Kanha Mahajan",
+      "userEmail": "nileshkgn1111@gmail.com",
+      "warehouseId": "WH-MU13KGYF-NQ1X",
+      "warehouseName": "Amax",
+      "warehouseLocation": "Mumbai",
+      "requiredSpace": 50,
+      "startDate": "2026-09-14",
+      "endDate": "2026-10-14",
+      "items": [
+        {
+          "itemId": "INV-MU13HLQU-69UK",
+          "itemName": "Industrial pump",
+          "sku": "SKU-871089",
+          "quantity": 100
+        }
+      ],
+      "estimatedCost": 950,
+      "status": "Cancelled",
+      "createdAt": "2026-09-14T10:30:33.600Z",
+      "updatedAt": "2026-09-14T11:27:28.516Z"
+    },
+    {
+      "id": "BKG-MU13KNG0-G0XD",
+      "userId": "USR-MU12R1ZX-VYPY",
+      "userName": "Kanha Mahajan",
+      "userEmail": "kanhamahajan01@gmail.com",
+      "warehouseId": "WH-MU13KGYF-NQ1X",
+      "warehouseName": "Amax",
+      "warehouseLocation": "Mumbai",
+      "requiredSpace": 50,
+      "startDate": "2026-09-14",
+      "endDate": "2026-10-14",
+      "items": [],
+      "estimatedCost": 950,
+      "status": "Cancelled",
+      "createdAt": "2026-09-14T10:25:48.720Z",
+      "updatedAt": "2026-09-14T11:27:32.415Z"
+    }
+  ],
+  "stockMovements": [
+    {
+      "id": "MOV-MU13HLQU-45KI",
+      "warehouseId": "UNASSIGNED",
+      "warehouseName": "Unassigned Bay",
+      "itemId": "INV-MU13HLQU-69UK",
+      "itemName": "Industrial pump",
+      "sku": "SKU-871089",
+      "movementType": "Stock In",
+      "quantity": 100,
+      "unit": "Boxes",
+      "previousQuantity": 0,
+      "newQuantity": 100,
+      "reason": "Initial item registration",
+      "performedBy": "Kanha Mahajan",
+      "performedByRole": "User",
+      "timestamp": "2026-09-14T10:23:26.550Z"
+    },
+    {
+      "id": "MOV-MU13TVZ6-MEXA",
+      "warehouseId": "WH-MU13KGYF-NQ1X",
+      "warehouseName": "Amax",
+      "itemId": "INV-MU13HLQU-69UK",
+      "itemName": "Industrial pump",
+      "sku": "SKU-871089",
+      "movementType": "Stock In",
+      "quantity": 100,
+      "unit": "Boxes",
+      "previousQuantity": 0,
+      "newQuantity": 100,
+      "reason": "Booking approved (#BKG-MU13QR9C-1MYG)",
+      "performedBy": "Admin / System",
+      "performedByRole": "Admin",
+      "timestamp": "2026-09-14T10:32:59.682Z"
+    }
+  ],
+  "notifications": [
+    {
+      "id": "NOTIF-MU15S18F-BYUL",
+      "userId": "USR-MU12R1ZX-VYPY",
+      "title": "Booking Cancelled",
+      "message": "Your warehouse booking #BKG-MU13KNG0-G0XD for Amax is now Cancelled.",
+      "type": "info",
+      "read": false,
+      "createdAt": "2026-09-14T11:27:32.415Z"
+    },
+    {
+      "id": "NOTIF-MU15RY84-6OCA",
+      "userId": "USR-MU13DDZQ-FEFY",
+      "title": "Booking Cancelled",
+      "message": "Your warehouse booking #BKG-MU13QR9C-1MYG for Amax is now Cancelled.",
+      "type": "info",
+      "read": false,
+      "createdAt": "2026-09-14T11:27:28.516Z"
+    },
+    {
+      "id": "NOTIF-MU15HKXP-J618",
+      "userId": "USR-MU12R1ZX-VYPY",
+      "title": "Booking Cancelled",
+      "message": "Your warehouse booking #BKG-MU13SRTU-Q6LC for Amax is now Cancelled.",
+      "type": "info",
+      "read": false,
+      "createdAt": "2026-09-14T11:19:24.733Z"
+    },
+    {
+      "id": "NOTIF-MU13TX81-N2DP",
+      "userId": "USR-MU12R1ZX-VYPY",
+      "title": "Booking Approved",
+      "message": "Your warehouse booking #BKG-MU13KNG0-G0XD for Amax is now Approved.",
+      "type": "success",
+      "read": true,
+      "createdAt": "2026-09-14T10:33:01.298Z"
+    },
+    {
+      "id": "NOTIF-MU13TVZ6-9AKZ",
+      "userId": "USR-MU13DDZQ-FEFY",
+      "title": "Booking Approved",
+      "message": "Your warehouse booking #BKG-MU13QR9C-1MYG for Amax is now Approved.",
+      "type": "success",
+      "read": true,
+      "createdAt": "2026-09-14T10:32:59.682Z"
+    },
+    {
+      "id": "NOTIF-MU13TUDZ-E031",
+      "userId": "USR-MU12R1ZX-VYPY",
+      "title": "Booking Approved",
+      "message": "Your warehouse booking #BKG-MU13SRTU-Q6LC for Amax is now Approved.",
+      "type": "success",
+      "read": true,
+      "createdAt": "2026-09-14T10:32:57.623Z"
+    },
+    {
+      "id": "NOTIF-MU13TU5T-DZTQ",
+      "userId": "USR-MU12R1ZX-VYPY",
+      "title": "Booking Approved",
+      "message": "Your warehouse booking #BKG-MU13SRTU-Q6LC for Amax is now Approved.",
+      "type": "success",
+      "read": true,
+      "createdAt": "2026-09-14T10:32:57.329Z"
+    },
+    {
+      "id": "NOTIF-MU13SRTU-8TRF",
+      "targetRole": "Admin",
+      "title": "New Booking Request",
+      "message": "User Kanha Mahajan requested 50 sq ft in Amax.",
+      "type": "info",
+      "read": true,
+      "createdAt": "2026-09-14T10:32:07.650Z"
+    },
+    {
+      "id": "NOTIF-MU13SRTU-7VQ2",
+      "userId": "USR-MU12R1ZX-VYPY",
+      "title": "Booking Request Submitted",
+      "message": "Booking #BKG-MU13SRTU-Q6LC for Amax (50 sq ft) has been submitted for review.",
+      "type": "info",
+      "read": true,
+      "createdAt": "2026-09-14T10:32:07.650Z"
+    },
+    {
+      "id": "NOTIF-MU13QR9C-W8EB",
+      "targetRole": "Admin",
+      "title": "New Booking Request",
+      "message": "User Kanha Mahajan requested 50 sq ft in Amax.",
+      "type": "info",
+      "read": true,
+      "createdAt": "2026-09-14T10:30:33.600Z"
+    },
+    {
+      "id": "NOTIF-MU13QR9C-JLF9",
+      "userId": "USR-MU13DDZQ-FEFY",
+      "title": "Booking Request Submitted",
+      "message": "Booking #BKG-MU13QR9C-1MYG for Amax (50 sq ft) has been submitted for review.",
+      "type": "info",
+      "read": true,
+      "createdAt": "2026-09-14T10:30:33.600Z"
+    },
+    {
+      "id": "NOTIF-MU13KNG1-8EQU",
+      "targetRole": "Admin",
+      "title": "New Booking Request",
+      "message": "User Kanha Mahajan requested 50 sq ft in Amax.",
+      "type": "info",
+      "read": true,
+      "createdAt": "2026-09-14T10:25:48.721Z"
+    },
+    {
+      "id": "NOTIF-MU13KNG1-R2ES",
+      "userId": "USR-MU12R1ZX-VYPY",
+      "title": "Booking Request Submitted",
+      "message": "Booking #BKG-MU13KNG0-G0XD for Amax (50 sq ft) has been submitted for review.",
+      "type": "info",
+      "read": true,
+      "createdAt": "2026-09-14T10:25:48.721Z"
+    },
+    {
+      "id": "NOTIF-MU13KGYF-BM4Z",
+      "title": "New Warehouse Added",
+      "message": "Warehouse \"Amax\" in Mumbai is now available with 5000 sq ft capacity.",
+      "type": "info",
+      "read": true,
+      "createdAt": "2026-09-14T10:25:40.311Z"
+    },
+    {
+      "id": "NOTIF-MU13DDZQ-D3IR",
+      "userId": "USR-MU13DDZQ-FEFY",
+      "title": "Welcome to Smart Inventory",
+      "message": "Hello Kanha Mahajan! Your account has been created with role: User.",
+      "type": "success",
+      "read": true,
+      "createdAt": "2026-09-14T10:20:09.878Z"
+    },
+    {
+      "id": "NOTIF-MU12R1ZX-769G",
+      "userId": "USR-MU12R1ZX-VYPY",
+      "title": "Welcome to Smart Inventory",
+      "message": "Hello Kanha Mahajan! Your account has been created with role: Admin.",
+      "type": "success",
+      "read": true,
+      "createdAt": "2026-09-14T10:02:47.901Z"
+    }
+  ]
+}

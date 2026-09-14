@@ -1,0 +1,10 @@
+{
+  "name": "SmartWarehouse",
+  "description": "Complete role-based smart inventory tracking and warehouse booking platform with live stock movement, capacity monitoring, and REST APIs.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

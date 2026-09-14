@@ -1,0 +1,67 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'nileshkgn1111@gmail.com') ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'Admin')
+      );
+    }
+
+    function isManager() {
+      return isSignedIn() && (
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'Warehouse Manager')
+      );
+    }
+
+    // Test doc connection
+    match /test/{docId} {
+      allow read, write: if true;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    // Warehouses Collection
+    match /warehouses/{warehouseId} {
+      allow read, write: if true;
+    }
+
+    // Inventory Collection
+    match /inventory/{itemId} {
+      allow read, write: if true;
+    }
+
+    // Bookings Collection
+    match /bookings/{bookingId} {
+      allow read, write: if true;
+    }
+
+    // Stock Movements Collection
+    match /stockMovements/{movementId} {
+      allow read, write: if true;
+    }
+
+    // Notifications Collection
+    match /notifications/{notificationId} {
+      allow read, write: if true;
+    }
+  }
+}

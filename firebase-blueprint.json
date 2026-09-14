@@ -1,0 +1,158 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role-based access information.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier matching auth UID." },
+        "name": { "type": "string", "description": "Full name of the user." },
+        "email": { "type": "string", "format": "email", "description": "User email address." },
+        "phone": { "type": "string", "description": "Contact telephone number." },
+        "role": { "type": "string", "enum": ["Admin", "Warehouse Manager", "User"], "description": "Access tier." },
+        "status": { "type": "string", "enum": ["Active", "Inactive"], "description": "Account status." },
+        "assignedWarehouseId": { "type": "string", "description": "Assigned warehouse facility for managers." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp." }
+      },
+      "required": ["id", "name", "email", "role", "status", "createdAt"]
+    },
+    "Warehouse": {
+      "title": "Warehouse",
+      "description": "Physical warehouse facility storage metadata.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Warehouse facility ID." },
+        "name": { "type": "string", "description": "Facility name." },
+        "location": { "type": "string", "description": "City, state or address." },
+        "totalCapacity": { "type": "number", "description": "Total square footage." },
+        "availableSpace": { "type": "number", "description": "Remaining available square footage." },
+        "storageType": { "type": "string", "description": "Storage climate or condition." },
+        "pricePerMonth": { "type": "number", "description": "Monthly rate per sq ft." },
+        "status": { "type": "string", "description": "Operational status." },
+        "assignedManagerId": { "type": "string", "description": "Manager user ID." },
+        "assignedManagerName": { "type": "string", "description": "Manager display name." },
+        "description": { "type": "string", "description": "Facility details." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "location", "totalCapacity", "availableSpace", "storageType", "pricePerMonth", "status"]
+    },
+    "InventoryItem": {
+      "title": "InventoryItem",
+      "description": "Stored product or material record.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Inventory item ID." },
+        "userId": { "type": "string", "description": "Owner user ID." },
+        "userName": { "type": "string", "description": "Owner name." },
+        "userEmail": { "type": "string", "description": "Owner email." },
+        "name": { "type": "string", "description": "Product name." },
+        "sku": { "type": "string", "description": "SKU or barcode string." },
+        "category": { "type": "string", "description": "Product category." },
+        "description": { "type": "string", "description": "Item description." },
+        "quantity": { "type": "number", "description": "Current quantity." },
+        "unit": { "type": "string", "description": "Unit of measurement." },
+        "weightSize": { "type": "string", "description": "Physical weight/dimensions." },
+        "expiryDate": { "type": "string", "description": "Optional expiration date." },
+        "barcode": { "type": "string", "description": "Item barcode." },
+        "imageUrl": { "type": "string", "description": "Product image or showcase." },
+        "storageRequirement": { "type": "string", "description": "Required storage condition." },
+        "warehouseId": { "type": "string", "description": "Allocated warehouse ID." },
+        "warehouseName": { "type": "string", "description": "Allocated warehouse name." },
+        "status": { "type": "string", "description": "Handling or stock status." },
+        "lowStockThreshold": { "type": "number", "description": "Alert threshold." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "name", "sku", "category", "quantity", "unit", "lowStockThreshold"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Storage space reservation request.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Booking reservation ID." },
+        "userId": { "type": "string", "description": "Client user ID." },
+        "userName": { "type": "string", "description": "Client name." },
+        "userEmail": { "type": "string", "description": "Client email." },
+        "warehouseId": { "type": "string", "description": "Target warehouse facility ID." },
+        "warehouseName": { "type": "string", "description": "Warehouse facility name." },
+        "warehouseLocation": { "type": "string", "description": "Warehouse facility location." },
+        "requiredSpace": { "type": "number", "description": "Square feet requested." },
+        "startDate": { "type": "string", "description": "Reservation start." },
+        "endDate": { "type": "string", "description": "Reservation end." },
+        "estimatedCost": { "type": "number", "description": "Total estimated cost." },
+        "status": { "type": "string", "enum": ["Pending", "Approved", "Active", "Completed", "Cancelled", "Rejected"] },
+        "rejectionReason": { "type": "string", "description": "Optional notes if rejected." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "warehouseId", "requiredSpace", "startDate", "endDate", "status"]
+    },
+    "StockMovement": {
+      "title": "StockMovement",
+      "description": "Immutable ledger entry of inventory changes.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Audit movement ID." },
+        "warehouseId": { "type": "string", "description": "Warehouse facility ID." },
+        "warehouseName": { "type": "string", "description": "Warehouse name." },
+        "itemId": { "type": "string", "description": "Inventory item ID." },
+        "itemName": { "type": "string", "description": "Product name." },
+        "sku": { "type": "string", "description": "Product SKU." },
+        "movementType": { "type": "string", "enum": ["Stock In", "Stock Out", "Transfer", "Adjustment"] },
+        "quantity": { "type": "number", "description": "Units moved." },
+        "unit": { "type": "string", "description": "Unit of measurement." },
+        "previousQuantity": { "type": "number", "description": "Quantity before change." },
+        "newQuantity": { "type": "number", "description": "Quantity after change." },
+        "reason": { "type": "string", "description": "Audit movement justification." },
+        "performedBy": { "type": "string", "description": "Operator name." },
+        "performedByRole": { "type": "string", "description": "Operator role." },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "warehouseId", "itemId", "movementType", "quantity", "reason", "performedBy", "timestamp"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "System alert or event notification.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Notification ID." },
+        "userId": { "type": "string", "description": "Recipient user ID." },
+        "targetRole": { "type": "string", "description": "Recipient target role." },
+        "title": { "type": "string", "description": "Notice title." },
+        "message": { "type": "string", "description": "Notice body." },
+        "type": { "type": "string", "enum": ["info", "warning", "success", "alert"] },
+        "read": { "type": "boolean", "description": "Read status." },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "message", "type", "read", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles indexed by UID."
+    },
+    "/warehouses/{warehouseId}": {
+      "schema": "Warehouse",
+      "description": "Physical warehouse facilities and capacity metrics."
+    },
+    "/inventory/{inventoryId}": {
+      "schema": "InventoryItem",
+      "description": "Inventory product records."
+    },
+    "/bookings/{bookingId}": {
+      "schema": "Booking",
+      "description": "Space reservation bookings."
+    },
+    "/stockMovements/{movementId}": {
+      "schema": "StockMovement",
+      "description": "Immutable inventory movement ledger."
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "System notices and operational alerts."
+    }
+  }
+}
