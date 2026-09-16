@@ -30,12 +30,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenLogin,
   onNavigate
 }) => {
-  const { currentUser, logout, setUserQuickly } = useAuth();
+  const { currentUser, logout } = useAuth();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [showNotifMenu, setShowNotifMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [allUsers, setAllUsers] = useState<User[]>([]);
-  const [showSwitchModal, setShowSwitchModal] = useState(false);
 
   const notifRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -52,18 +50,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
-  const fetchUsers = async () => {
-    try {
-      const users = await api.getUsers();
-      setAllUsers(users);
-    } catch {
-      // ignore
-    }
-  };
-
   useEffect(() => {
     fetchNotifs();
-    fetchUsers();
     const interval = setInterval(fetchNotifs, 10000);
     return () => clearInterval(interval);
   }, [currentUser]);
@@ -93,6 +81,12 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
+  const getRoleDashboardTab = () => {
+    if (currentUser?.role === 'Admin') return 'admin-dashboard';
+    if (currentUser?.role === 'Warehouse Manager') return 'manager-operations';
+    return 'dashboard';
+  };
+
   return (
     <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-2xs">
       <div className="px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -110,7 +104,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <div
             className="flex items-center gap-2.5 cursor-pointer"
-            onClick={() => onNavigate?.(currentUser?.role === 'Admin' ? 'admin-dashboard' : currentUser?.role === 'Warehouse Manager' ? 'manager-dashboard' : 'dashboard')}
+            onClick={() => onNavigate?.(getRoleDashboardTab())}
           >
             <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-sm shadow-blue-500/20">
               <Building2 className="w-5 h-5" />
@@ -121,7 +115,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   SmartWarehouse
                 </span>
                 <span className="hidden sm:inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800">
-                  v2.0
+                  RBAC Secure
                 </span>
               </div>
               <p className="text-[11px] text-slate-600 hidden sm:block">
@@ -135,20 +129,6 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center gap-1.5 sm:gap-2">
           {currentUser ? (
             <>
-              {/* Quick Switch User Button (helpful for testing multi-role workflows) */}
-              <button
-                id="switch-user-btn"
-                onClick={() => {
-                  fetchUsers();
-                  setShowSwitchModal(true);
-                }}
-                className="hidden md:flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-blue-600 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors"
-                title="Switch between registered accounts"
-              >
-                <Users className="w-3.5 h-3.5 text-slate-500" />
-                <span>Switch Account ({allUsers.length})</span>
-              </button>
-
               {/* Notifications Dropdown */}
               <div className="relative" ref={notifRef}>
                 <button
@@ -267,16 +247,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <button
                         onClick={() => {
                           setShowUserMenu(false);
-                          setShowSwitchModal(true);
-                        }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-700 hover:bg-slate-100 rounded-lg text-left"
-                      >
-                        <Users className="w-4 h-4 text-slate-500" />
-                        Switch or View Accounts
-                      </button>
-                      <button
-                        onClick={() => {
-                          setShowUserMenu(false);
                           logout();
                         }}
                         className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-rose-600 hover:bg-rose-50 rounded-lg text-left font-medium"
@@ -303,92 +273,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
         </div>
       </div>
-
-      {/* Switch Account Modal */}
-      {showSwitchModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">Switch Registered Account</h3>
-                <p className="text-xs text-slate-500">Easily test Admin, Manager, and Client roles</p>
-              </div>
-              <button
-                onClick={() => setShowSwitchModal(false)}
-                className="text-slate-400 hover:text-slate-600 text-lg font-semibold"
-              >
-                &times;
-              </button>
-            </div>
-
-            <div className="p-5 max-h-80 overflow-y-auto divide-y divide-slate-100">
-              {allUsers.length === 0 ? (
-                <div className="text-center py-6 text-slate-500 text-xs">
-                  <p>No registered accounts found in the database.</p>
-                  <p className="mt-1 text-slate-400">Register a new user to test the system.</p>
-                </div>
-              ) : (
-                allUsers.map(u => (
-                  <div
-                    key={u.id}
-                    className={`py-3 flex items-center justify-between rounded-lg px-2 hover:bg-slate-50 transition-colors ${
-                      currentUser?.id === u.id ? 'bg-blue-50/70' : ''
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs">
-                        {u.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="text-xs font-semibold text-slate-900 flex items-center gap-2">
-                          <span>{u.name}</span>
-                          {currentUser?.id === u.id && (
-                            <span className="text-[10px] text-blue-600 font-bold bg-blue-100 px-1.5 py-0.2 rounded">
-                              Current
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-slate-500">{u.email}</div>
-                        <div className="text-[10px] font-semibold text-slate-600 mt-0.5">
-                          Role: <span className="text-blue-700 font-bold">{u.role}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        setUserQuickly(u);
-                        setShowSwitchModal(false);
-                      }}
-                      className="text-xs font-semibold text-blue-600 hover:bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-200"
-                    >
-                      {currentUser?.id === u.id ? 'Active' : 'Switch'}
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center">
-              <button
-                onClick={() => {
-                  setShowSwitchModal(false);
-                  onOpenAuthModal?.();
-                }}
-                className="text-xs font-semibold text-blue-600 hover:underline"
-              >
-                + Register Another User
-              </button>
-              <button
-                onClick={() => setShowSwitchModal(false)}
-                className="px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-100"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </header>
   );
 };

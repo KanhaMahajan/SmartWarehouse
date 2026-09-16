@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
+    // Authentication and Role Helper Functions
     function isSignedIn() {
       return request.auth != null;
     }
@@ -11,10 +11,7 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-
+    // Verified single project administrator email
     function isAdmin() {
       return isSignedIn() && (
         request.auth.token.email == 'nileshkgn1111@gmail.com'
@@ -24,43 +21,75 @@ service cloud.firestore {
     function isManager() {
       return isSignedIn() && (
         isAdmin() ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'Warehouse Manager')
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Warehouse Manager')
       );
-    }
-
-    // Test doc connection
-    match /test/{docId} {
-      allow read, write: if true;
     }
 
     // Users Collection
     match /users/{userId} {
-      allow read, write: if true;
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && (
+        (request.resource.data.role == 'Admin' && isAdmin()) ||
+        (request.resource.data.role == 'User')
+      );
+      allow update: if (isAdmin()) || (
+        isOwner(userId) && request.resource.data.role == resource.data.role
+      );
+      allow delete: if isAdmin();
     }
 
     // Warehouses Collection
     match /warehouses/{warehouseId} {
-      allow read, write: if true;
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
     }
 
     // Inventory Collection
     match /inventory/{itemId} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || isManager() || isAdmin()
+      );
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || isManager() || isAdmin()
+      );
+      allow delete: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
     }
 
     // Bookings Collection
     match /bookings/{bookingId} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || isManager() || isAdmin()
+      );
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAdmin() || (
+        isOwner(resource.data.userId) && resource.data.status == 'Pending'
+      );
+      allow delete: if isAdmin() || isOwner(resource.data.userId);
     }
 
     // Stock Movements Collection
     match /stockMovements/{movementId} {
-      allow read, write: if true;
+      allow read: if isSignedIn();
+      allow create: if isManager() || isAdmin();
+      allow update, delete: if isAdmin();
     }
 
     // Notifications Collection
     match /notifications/{notificationId} {
-      allow read, write: if true;
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
+      allow delete: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
     }
   }
 }

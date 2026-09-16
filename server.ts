@@ -283,9 +283,34 @@ async function startServer() {
     db.notifications.unshift(notif);
   }
 
+  // Helper to extract authenticated user from security headers
+  function getRequester(req: express.Request, db: any): any | null {
+    const userId = (req.headers["x-user-id"] as string) || "";
+    const userEmail = (req.headers["x-user-email"] as string) || "";
+    if (!userId && !userEmail) return null;
+
+    const found = db.users.find(
+      (u: any) =>
+        (userId && u.id === userId) ||
+        (userEmail && u.email.toLowerCase() === userEmail.toLowerCase())
+    );
+    return found || null;
+  }
+
   // API Routes
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", time: new Date().toISOString() });
+  });
+
+  // Reconcile and verify session with backend-enforced role
+  app.get("/api/auth/me", (req, res) => {
+    const db = ensureDb();
+    const requester = getRequester(req, db);
+    if (!requester) {
+      return res.status(401).json({ error: "Session invalid or unauthenticated" });
+    }
+    const { password: _, ...userSafe } = requester;
+    res.json({ user: userSafe });
   });
 
   // 1. AUTH ROUTES
@@ -357,7 +382,7 @@ async function startServer() {
   });
 
   app.post("/api/auth/register", (req, res) => {
-    const { name, email, phone, password, role = "User" } = req.body;
+    const { name, email, phone, password } = req.body;
     if (!name || !email || !password) {
       return res.status(400).json({ error: "Name, email, and password are required" });
     }
@@ -368,27 +393,24 @@ async function startServer() {
       return res.status(400).json({ error: "User with this email already exists" });
     }
 
-    // RBAC: Check Single-Admin rule
+    // RBAC: Roles are strictly assigned and controlled by the backend
+    const normalizedEmail = email.trim().toLowerCase();
+    const ADMIN_PERMANENT_EMAIL = "nileshkgn1111@gmail.com";
     const hasAdmin = db.users.some(u => u.role === "Admin");
-    let userRole: 'Admin' | 'Warehouse Manager' | 'User' = 'User';
 
-    if (role === "Admin") {
-      if (hasAdmin) {
-        return res.status(403).json({
-          error: "Single-Admin Policy: An authorized Admin account already exists. Only ONE Admin account is permitted in the entire system."
-        });
-      }
+    let userRole: 'Admin' | 'Warehouse Manager' | 'User' = "User";
+    if (normalizedEmail === ADMIN_PERMANENT_EMAIL && !hasAdmin) {
       userRole = "Admin";
-    } else if (role === "Warehouse Manager") {
-      userRole = "Warehouse Manager";
     } else {
+      // All public registrations are strictly assigned standard Client User role
+      // Warehouse Manager accounts can only be designated by an Administrator
       userRole = "User";
     }
 
     const newUser = {
       id: generateId("USR"),
       name: name.trim(),
-      email: email.trim().toLowerCase(),
+      email: normalizedEmail,
       phone: (phone || "").trim(),
       password: password.trim(),
       role: userRole,
@@ -452,19 +474,28 @@ async function startServer() {
   });
 
   // 2. USER MANAGEMENT (Admin)
-  app.get("/api/users", (_req, res) => {
+  app.get("/api/users", (req, res) => {
     const db = ensureDb();
+    const requester = getRequester(req, db);
+    if (!requester || requester.role !== "Admin") {
+      return res.status(403).json({ error: "Access Denied: User directory is restricted to Administrators." });
+    }
     const safeUsers = db.users.map(({ password, ...u }) => u);
     res.json(safeUsers);
   });
 
   app.post("/api/users", (req, res) => {
+    const db = ensureDb();
+    const requester = getRequester(req, db);
+    if (!requester || requester.role !== "Admin") {
+      return res.status(403).json({ error: "Access Denied: Only Administrators can provision user and manager accounts." });
+    }
+
     const { name, email, phone, password, role = "User", status = "Active", assignedWarehouseId } = req.body;
     if (!name || !email) {
       return res.status(400).json({ error: "Name and email are required" });
     }
 
-    const db = ensureDb();
     if (db.users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
       return res.status(400).json({ error: "Email is already registered" });
     }
@@ -502,9 +533,27 @@ async function startServer() {
     const { name, email, phone, role, status, assignedWarehouseId, password } = req.body;
 
     const db = ensureDb();
+    const requester = getRequester(req, db);
+    if (!requester) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+
+    // Non-admins cannot update other accounts
+    if (requester.role !== "Admin" && requester.id !== id) {
+      return res.status(403).json({ error: "Access Denied: You cannot modify other users' accounts." });
+    }
+
     const user = db.users.find(u => u.id === id);
     if (!user) {
       return res.status(404).json({ error: "User not found" });
+    }
+
+    // RBAC: Users and Managers cannot change their own or others' roles!
+    if (requester.role !== "Admin") {
+      // Strips role changes from non-admin updates
+      if (role && role !== user.role) {
+        return res.status(403).json({ error: "Access Denied: You cannot modify account roles. Roles are assigned and controlled by the system backend." });
+      }
     }
 
     // RBAC: Enforce single-Admin immutability
@@ -531,7 +580,7 @@ async function startServer() {
     if (name) user.name = name.trim();
     if (email) user.email = email.trim().toLowerCase();
     if (phone !== undefined) user.phone = phone.trim();
-    if (role && (user.role !== "Admin" || role === "Admin")) {
+    if (role && requester.role === "Admin" && (user.role !== "Admin" || role === "Admin")) {
       user.role = role === "Warehouse Manager" ? "Warehouse Manager" : (user.role === "Admin" ? "Admin" : "User");
     }
     if (status && user.role !== "Admin") user.status = status;
@@ -546,6 +595,10 @@ async function startServer() {
   app.delete("/api/users/:id", (req, res) => {
     const { id } = req.params;
     const db = ensureDb();
+    const requester = getRequester(req, db);
+    if (!requester || requester.role !== "Admin") {
+      return res.status(403).json({ error: "Access Denied: User deletion is strictly restricted to Administrators." });
+    }
     const user = db.users.find(
       u => u.id === id || u.id.toLowerCase() === id.toLowerCase() || u.email.toLowerCase() === id.toLowerCase()
     );
@@ -583,12 +636,16 @@ async function startServer() {
   });
 
   app.post("/api/warehouses", (req, res) => {
+    const db = ensureDb();
+    const requester = getRequester(req, db);
+    if (!requester || requester.role !== "Admin") {
+      return res.status(403).json({ error: "Access Denied: Creating warehouse facilities is restricted to Administrators." });
+    }
+
     const { name, location, totalCapacity, storageType, pricePerMonth, assignedManagerId, description } = req.body;
     if (!name || !location || !totalCapacity || !storageType) {
       return res.status(400).json({ error: "Name, location, total capacity, and storage type are required" });
     }
-
-    const db = ensureDb();
     const capacityNum = Number(totalCapacity);
     let managerName: string | undefined;
 
@@ -637,9 +694,14 @@ async function startServer() {
 
   app.put("/api/warehouses/:id", (req, res) => {
     const { id } = req.params;
+    const db = ensureDb();
+    const requester = getRequester(req, db);
+    if (!requester || requester.role !== "Admin") {
+      return res.status(403).json({ error: "Access Denied: Modifying warehouse facilities is restricted to Administrators." });
+    }
+
     const { name, location, totalCapacity, availableSpace, storageType, pricePerMonth, assignedManagerId, description, status } = req.body;
 
-    const db = ensureDb();
     const wh = db.warehouses.find(w => w.id === id);
     if (!wh) {
       return res.status(404).json({ error: "Warehouse not found" });
@@ -680,6 +742,10 @@ async function startServer() {
   app.delete("/api/warehouses/:id", (req, res) => {
     const { id } = req.params;
     const db = ensureDb();
+    const requester = getRequester(req, db);
+    if (!requester || requester.role !== "Admin") {
+      return res.status(403).json({ error: "Access Denied: Deleting warehouse facilities is strictly restricted to Administrators." });
+    }
     const index = db.warehouses.findIndex(w => w.id === id);
     if (index === -1) {
       return res.status(404).json({ error: "Warehouse not found" });
@@ -962,6 +1028,11 @@ async function startServer() {
     }
 
     const db = ensureDb();
+    const requester = getRequester(req, db);
+    if (requester && requester.role !== "User") {
+      return res.status(403).json({ error: "Access Denied: Only Client Users can book warehouse storage space." });
+    }
+
     const user = db.users.find(u => u.id === userId);
     const warehouse = db.warehouses.find(w => w.id === warehouseId);
 
@@ -1028,12 +1099,17 @@ async function startServer() {
     const { id } = req.params;
     const { status, rejectionReason } = req.body;
 
+    const db = ensureDb();
+    const requester = getRequester(req, db);
+    if (!requester || requester.role !== "Admin") {
+      return res.status(403).json({ error: "Access Denied: Booking approval and status management is strictly restricted to Administrators." });
+    }
+
     const validStatuses = ["Pending", "Approved", "Active", "Completed", "Cancelled", "Rejected"];
     if (!status || !validStatuses.includes(status)) {
       return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
     }
 
-    const db = ensureDb();
     const booking = db.bookings.find(b => b.id === id);
     if (!booking) {
       return res.status(404).json({ error: "Booking not found" });
@@ -1112,9 +1188,17 @@ async function startServer() {
   app.delete("/api/bookings/:id", (req, res) => {
     const { id } = req.params;
     const db = ensureDb();
+    const requester = getRequester(req, db);
+
     const index = db.bookings.findIndex(b => b.id === id);
     if (index === -1) {
       return res.status(404).json({ error: "Booking not found" });
+    }
+
+    const booking = db.bookings[index];
+    // RBAC: Only Administrator or the booking creator can delete/cancel a booking
+    if (!requester || (requester.role !== "Admin" && requester.id !== booking.userId)) {
+      return res.status(403).json({ error: "Access Denied: You do not have permission to delete this booking." });
     }
 
     const removed = db.bookings.splice(index, 1)[0];
@@ -1153,6 +1237,12 @@ async function startServer() {
   });
 
   app.post("/api/stock-movements", (req, res) => {
+    const db = ensureDb();
+    const requester = getRequester(req, db);
+    if (!requester || requester.role === "User") {
+      return res.status(403).json({ error: "Access Denied: Stock In/Out movements can only be registered by Warehouse Managers or Administrators." });
+    }
+
     const {
       warehouseId,
       itemId,
@@ -1166,8 +1256,6 @@ async function startServer() {
     if (!itemId || !quantity || !movementType) {
       return res.status(400).json({ error: "Item ID, quantity, and movement type are required" });
     }
-
-    const db = ensureDb();
     const item = db.inventory.find(i => i.id === itemId);
     if (!item) {
       return res.status(404).json({ error: "Item not found" });

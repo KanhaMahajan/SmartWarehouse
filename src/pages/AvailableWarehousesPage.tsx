@@ -16,12 +16,10 @@ import {
 
 interface AvailableWarehousesPageProps {
   onOpenBookWarehouse: (wh?: Warehouse) => void;
-  onOpenAddWarehouse?: () => void;
 }
 
 export const AvailableWarehousesPage: React.FC<AvailableWarehousesPageProps> = ({
-  onOpenBookWarehouse,
-  onOpenAddWarehouse
+  onOpenBookWarehouse
 }) => {
   const { currentUser } = useAuth();
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -71,16 +69,7 @@ export const AvailableWarehousesPage: React.FC<AvailableWarehousesPageProps> = (
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {currentUser?.role === 'Admin' && onOpenAddWarehouse && (
-            <button
-              onClick={onOpenAddWarehouse}
-              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors shadow-sm flex items-center gap-2"
-            >
-              + Create Warehouse Facility
-            </button>
-          )}
-        </div>
+        <div className="flex flex-wrap items-center gap-2"></div>
       </div>
 
       {/* Search & Filter Bar */}
@@ -124,21 +113,12 @@ export const AvailableWarehousesPage: React.FC<AvailableWarehousesPageProps> = (
               <h3 className="text-base font-bold text-slate-900">
                 Available Warehouses: No warehouses available
               </h3>
-              <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 mb-5">
-                There are no warehouses created in the system yet. As an Administrator, create facilities to make storage capacity available for users.
+              <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 mb-3">
+                There are no warehouses available in the system yet.
               </p>
-              {currentUser?.role === 'Admin' && onOpenAddWarehouse ? (
-                <button
-                  onClick={onOpenAddWarehouse}
-                  className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-sm transition-colors"
-                >
-                  + Add First Warehouse
-                </button>
-              ) : (
-                <p className="text-[11px] text-blue-600 font-semibold">
-                  Tip: Switch to the Admin account using the top menu to create warehouses.
-                </p>
-              )}
+              <p className="text-[11px] text-slate-500 font-medium">
+                New warehouse storage facilities will appear here once provisioned by system administrators.
+              </p>
             </>
           ) : (
             <>

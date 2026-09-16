@@ -80,7 +80,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'admin-inventory', label: 'Master Inventory', icon: Package, badge: counts?.inventoryCount },
     { id: 'admin-users', label: 'User Directory', icon: Users },
     { id: 'admin-reports', label: 'Reports & Analytics', icon: BarChart3 },
-    { id: 'movements', label: 'Global Audit Trail', icon: ArrowLeftRight }
+    { id: 'movements', label: 'Global Audit Trail', icon: ArrowLeftRight },
+    { id: 'notifications', label: 'Alerts & Notices', icon: Bell }
   ];
 
   const currentNavItems =

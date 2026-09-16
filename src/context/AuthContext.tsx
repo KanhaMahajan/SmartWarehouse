@@ -20,11 +20,10 @@ interface AuthContextType {
   currentUser: User | null;
   loading: boolean;
   login: (email: string, pass: string) => Promise<void>;
-  loginWithGoogle: (preferredRole?: Role) => Promise<void>;
-  register: (name: string, email: string, phone: string, pass: string, role?: Role) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
+  register: (name: string, email: string, phone: string, pass: string) => Promise<void>;
   logout: () => Promise<void>;
   updateCurrentUser: (user: User) => void;
-  setUserQuickly: (user: User | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -42,15 +41,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Reconcile and verify user role strictly against backend database
+  const verifySessionWithBackend = async (localUser?: User | null) => {
+    try {
+      const res = await api.getMe();
+      if (res && res.user) {
+        // Enforce backend/database role, rejecting any tampered client role
+        const verifiedUser: User = {
+          ...res.user,
+          role: res.user.role // Fixed role assigned by backend/database
+        };
+        setCurrentUser(verifiedUser);
+        localStorage.setItem('si_auth_user', JSON.stringify(verifiedUser));
+        return verifiedUser;
+      }
+    } catch {
+      // Backend rejected or session invalid
+      if (localUser) {
+        console.warn("Backend session validation failed for local cache");
+      }
+    }
+    return null;
+  };
+
   useEffect(() => {
-    // 1. Check local cached user first for instant hydration
+    // 1. Initial cached user load followed immediately by backend verification
+    let initialUser: User | null = null;
     try {
       const stored = localStorage.getItem('si_auth_user');
       if (stored) {
-        setCurrentUser(JSON.parse(stored));
+        initialUser = JSON.parse(stored);
+        setCurrentUser(initialUser);
       }
     } catch {
       localStorage.removeItem('si_auth_user');
+    }
+
+    if (initialUser) {
+      verifySessionWithBackend(initialUser);
     }
 
     // 2. Listen to Firebase Auth state
@@ -74,7 +102,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               if (firebaseUser.email?.toLowerCase() === 'nileshkgn1111@gmail.com') {
                 role = 'Admin';
               } else {
-                // Non-admin can only be Warehouse Manager or User
+                // Role is fixed and loaded from database: Non-admin can only be Warehouse Manager or User
                 role = data.role === 'Warehouse Manager' ? 'Warehouse Manager' : 'User';
               }
               name = data.name || name;
@@ -97,6 +125,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setCurrentUser(resolvedUser);
           localStorage.setItem('si_auth_user', JSON.stringify(resolvedUser));
           await syncUserToFirestore(resolvedUser);
+          // Verify with backend as well
+          await verifySessionWithBackend(resolvedUser);
         } catch (e) {
           console.error("Failed resolving Firebase user profile:", e);
         }
@@ -107,7 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, []);
 
-  const loginWithGoogle = async (preferredRole: Role = 'User') => {
+  const loginWithGoogle = async () => {
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const fbUser = result.user;
@@ -115,8 +145,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let role: Role = 'User';
       if (fbUser.email?.toLowerCase() === 'nileshkgn1111@gmail.com') {
         role = 'Admin';
-      } else {
-        role = preferredRole === 'Warehouse Manager' ? 'Warehouse Manager' : 'User';
+      }
+
+      // Check if user already exists in Firestore to preserve database-assigned role
+      try {
+        const userDoc = await getDocFromServer(doc(db, 'users', fbUser.uid));
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          if (fbUser.email?.toLowerCase() === 'nileshkgn1111@gmail.com') {
+            role = 'Admin';
+          } else {
+            role = data.role === 'Warehouse Manager' ? 'Warehouse Manager' : 'User';
+          }
+        }
+      } catch {
+        // use default role
       }
 
       const newUser: User = {
@@ -133,7 +176,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('si_auth_user', JSON.stringify(newUser));
       await syncUserToFirestore(newUser);
 
-      // Also register on local API backend for unified analytics
+      // Also register / sync on backend
       try {
         await api.register({
           name: newUser.name,
@@ -145,6 +188,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch {
         // already exists or handled
       }
+
+      await verifySessionWithBackend(newUser);
     } catch (err: any) {
       console.error("Google sign in error:", err);
       throw err;
@@ -175,7 +220,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const register = async (name: string, email: string, phone: string, pass: string, role: Role = 'User') => {
+  const register = async (name: string, email: string, phone: string, pass: string) => {
     try {
       let uid: string | undefined;
       // 1. Register with Firebase Auth
@@ -186,8 +231,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log("Firebase Auth creation fallback to API:", fbErr);
       }
 
-      // 2. Call backend register API
-      const res = await api.register({ name, email, phone, password: pass, role });
+      // 2. Call backend register API - public registrations are strictly User (or Admin for verified email)
+      const res = await api.register({ name, email, phone, password: pass, role: 'User' });
       const activeUser = uid ? { ...res.user, id: uid } : res.user;
 
       setCurrentUser(activeUser);
@@ -209,20 +254,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('si_auth_user');
   };
 
+  // Fixed role policy: Users CANNOT change their role through profile/settings
   const updateCurrentUser = (user: User) => {
-    setCurrentUser(user);
-    localStorage.setItem('si_auth_user', JSON.stringify(user));
-    syncUserToFirestore(user);
-  };
-
-  const setUserQuickly = (user: User | null) => {
-    setCurrentUser(user);
-    if (user) {
-      localStorage.setItem('si_auth_user', JSON.stringify(user));
-      syncUserToFirestore(user);
-    } else {
-      localStorage.removeItem('si_auth_user');
-    }
+    if (!currentUser) return;
+    const fixedRoleUser: User = {
+      ...user,
+      id: currentUser.id,
+      role: currentUser.role // Role is strictly immutable by the user
+    };
+    setCurrentUser(fixedRoleUser);
+    localStorage.setItem('si_auth_user', JSON.stringify(fixedRoleUser));
+    syncUserToFirestore(fixedRoleUser);
   };
 
   return (
@@ -234,8 +276,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginWithGoogle,
         register,
         logout,
-        updateCurrentUser,
-        setUserQuickly
+        updateCurrentUser
       }}
     >
       {children}

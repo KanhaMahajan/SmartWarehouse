@@ -22,7 +22,8 @@ import { api } from './services/api';
 import {
   InventoryItem,
   Warehouse,
-  User
+  User,
+  Role
 } from './types';
 import {
   Package,
@@ -32,12 +33,50 @@ import {
   ArrowRight,
   Boxes,
   PlusCircle,
-  Lock
+  Lock,
+  ShieldAlert
 } from 'lucide-react';
+
+const ROLE_ALLOWED_TABS: Record<Role, string[]> = {
+  Admin: [
+    'admin-dashboard',
+    'admin-warehouses',
+    'admin-bookings',
+    'admin-inventory',
+    'admin-users',
+    'admin-reports',
+    'movements',
+    'notifications'
+  ],
+  'Warehouse Manager': [
+    'manager-operations',
+    'inventory',
+    'movements',
+    'notifications'
+  ],
+  User: [
+    'dashboard',
+    'inventory',
+    'warehouses',
+    'bookings',
+    'movements',
+    'notifications'
+  ]
+};
+
+const ROLE_DEFAULT_TAB: Record<Role, string> = {
+  Admin: 'admin-dashboard',
+  'Warehouse Manager': 'manager-operations',
+  User: 'dashboard'
+};
 
 const MainLayout: React.FC = () => {
   const { currentUser, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [accessDeniedNotice, setAccessDeniedNotice] = useState<{
+    attemptedTab: string;
+    userRole: string;
+  } | null>(null);
 
   // Modal triggers
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -58,7 +97,55 @@ const MainLayout: React.FC = () => {
   const [stockMovementOpen, setStockMovementOpen] = useState(false);
   const [preSelectedMovementItem, setPreSelectedMovementItem] = useState<InventoryItem | null>(null);
 
-  // Quick helper handlers
+  // Enforce role-based access control navigation
+  const navigateToTab = (targetTab: string, isFromUrl: boolean = false) => {
+    if (!currentUser) {
+      setActiveTab(targetTab);
+      return;
+    }
+
+    const role = currentUser.role || 'User';
+    const allowed = ROLE_ALLOWED_TABS[role] || [];
+
+    if (!allowed.includes(targetTab)) {
+      // Access Denied: Automatically redirect to role's authorized home dashboard
+      const fallbackTab = ROLE_DEFAULT_TAB[role] || 'dashboard';
+      setAccessDeniedNotice({
+        attemptedTab: targetTab,
+        userRole: role
+      });
+      setActiveTab(fallbackTab);
+      window.location.hash = fallbackTab;
+      return;
+    }
+
+    setAccessDeniedNotice(null);
+    setActiveTab(targetTab);
+    if (!isFromUrl && window.location.hash !== `#${targetTab}`) {
+      window.location.hash = targetTab;
+    }
+  };
+
+  // Sync with URL hash and address bar changes
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const handleHashSync = () => {
+      const rawHash = window.location.hash.replace(/^#\/?/, '').trim();
+      if (rawHash) {
+        navigateToTab(rawHash, true);
+      } else {
+        const defaultTab = ROLE_DEFAULT_TAB[currentUser.role] || 'dashboard';
+        navigateToTab(defaultTab, false);
+      }
+    };
+
+    handleHashSync();
+    window.addEventListener('hashchange', handleHashSync);
+    return () => window.removeEventListener('hashchange', handleHashSync);
+  }, [currentUser?.role, currentUser?.id]);
+
+  // Quick helper handlers with permission gating
   const handleOpenLogin = () => {
     setAuthModalMode('login');
     setAuthModalOpen(true);
@@ -75,21 +162,49 @@ const MainLayout: React.FC = () => {
   };
 
   const handleOpenBookWarehouse = (wh?: Warehouse) => {
+    if (currentUser?.role !== 'User') {
+      setAccessDeniedNotice({
+        attemptedTab: 'Book Storage Space (Client Users Only)',
+        userRole: currentUser?.role || 'Guest'
+      });
+      return;
+    }
     setSelectedWarehouseForBooking(wh || null);
     setBookWarehouseOpen(true);
   };
 
   const handleOpenAddWarehouse = (wh?: Warehouse) => {
+    if (currentUser?.role !== 'Admin') {
+      setAccessDeniedNotice({
+        attemptedTab: 'Add Warehouse (Admin Only)',
+        userRole: currentUser?.role || 'Guest'
+      });
+      return;
+    }
     setEditingWarehouse(wh || null);
     setAddWarehouseOpen(true);
   };
 
   const handleOpenAddUser = (user?: User) => {
+    if (currentUser?.role !== 'Admin') {
+      setAccessDeniedNotice({
+        attemptedTab: 'User Provisioning (Admin Only)',
+        userRole: currentUser?.role || 'Guest'
+      });
+      return;
+    }
     setEditingUser(user || null);
     setAddUserOpen(true);
   };
 
   const handleOpenStockMovement = (item?: InventoryItem) => {
+    if (currentUser?.role === 'User') {
+      setAccessDeniedNotice({
+        attemptedTab: 'Stock Movements (Manager/Admin Only)',
+        userRole: 'User'
+      });
+      return;
+    }
     setPreSelectedMovementItem(item || null);
     setStockMovementOpen(true);
   };
@@ -228,7 +343,7 @@ const MainLayout: React.FC = () => {
     <div className="min-h-screen bg-slate-50/50 flex flex-col font-sans text-slate-800 antialiased">
       {/* Top Navbar */}
       <Navbar
-        onNavigate={tab => setActiveTab(tab)}
+        onNavigate={tab => navigateToTab(tab)}
         onOpenLogin={handleOpenLogin}
       />
 
@@ -237,66 +352,130 @@ const MainLayout: React.FC = () => {
         <div className="w-64 shrink-0 hidden md:block">
           <Sidebar
             activeTab={activeTab}
-            onSelectTab={tab => setActiveTab(tab)}
+            onSelectTab={tab => navigateToTab(tab)}
           />
         </div>
 
         {/* Main Content Area */}
         <main className="flex-1 min-w-0">
-          {/* USER VIEWS */}
-          {activeTab === 'dashboard' && (
-            <UserDashboard
-              onNavigate={tab => setActiveTab(tab)}
-              onOpenAddInventory={() => handleOpenAddInventory()}
-              onOpenBookWarehouse={wh => handleOpenBookWarehouse(wh)}
-            />
+          {/* Strict Role Access Denied Notification Banner */}
+          {accessDeniedNotice && (
+            <div className="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200 flex items-start justify-between text-rose-800 shadow-xs animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex items-start gap-3">
+                <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-rose-900">
+                    Access Denied — Role Protection Active
+                  </h4>
+                  <p className="text-xs mt-0.5 text-rose-700 leading-relaxed">
+                    Your account role (<span className="font-bold">{accessDeniedNotice.userRole}</span>) is strictly prohibited from accessing <code className="px-1.5 py-0.5 bg-rose-100 rounded text-[11px] font-mono font-bold">#{accessDeniedNotice.attemptedTab}</code>.
+                    You have been automatically returned to your authorized role dashboard.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setAccessDeniedNotice(null)}
+                className="text-rose-500 hover:text-rose-800 text-sm font-bold ml-4 p-1"
+                aria-label="Dismiss access denied notification"
+              >
+                &times;
+              </button>
+            </div>
           )}
 
-          {activeTab === 'inventory' && (
-            <MyInventoryPage
-              onOpenAddInventory={item => handleOpenAddInventory(item)}
-              onOpenBookWarehouse={() => handleOpenBookWarehouse()}
-            />
+          {/* USER-ONLY VIEWS */}
+          {currentUser.role === 'User' && (
+            <>
+              {activeTab === 'dashboard' && (
+                <UserDashboard
+                  onNavigate={tab => navigateToTab(tab)}
+                  onOpenAddInventory={() => handleOpenAddInventory()}
+                  onOpenBookWarehouse={wh => handleOpenBookWarehouse(wh)}
+                />
+              )}
+
+              {activeTab === 'inventory' && (
+                <MyInventoryPage
+                  onOpenAddInventory={item => handleOpenAddInventory(item)}
+                  onOpenBookWarehouse={() => handleOpenBookWarehouse()}
+                />
+              )}
+
+              {activeTab === 'warehouses' && (
+                <AvailableWarehousesPage
+                  onOpenBookWarehouse={wh => handleOpenBookWarehouse(wh)}
+                  onOpenAddWarehouse={() => handleOpenAddWarehouse()}
+                />
+              )}
+
+              {activeTab === 'bookings' && (
+                <MyBookingsPage
+                  onOpenBookWarehouse={() => handleOpenBookWarehouse()}
+                />
+              )}
+
+              {activeTab === 'movements' && (
+                <StockMovementsPage
+                  onOpenStockMovementModal={() => handleOpenStockMovement()}
+                />
+              )}
+
+              {activeTab === 'notifications' && (
+                <NotificationsPage />
+              )}
+            </>
           )}
 
-          {activeTab === 'warehouses' && (
-            <AvailableWarehousesPage
-              onOpenBookWarehouse={wh => handleOpenBookWarehouse(wh)}
-              onOpenAddWarehouse={() => handleOpenAddWarehouse()}
-            />
+          {/* WAREHOUSE MANAGER VIEWS */}
+          {currentUser.role === 'Warehouse Manager' && (
+            <>
+              {activeTab === 'manager-operations' && (
+                <WarehouseManagerView
+                  onOpenStockMovementModal={item => handleOpenStockMovement(item)}
+                />
+              )}
+
+              {activeTab === 'inventory' && (
+                <MyInventoryPage
+                  onOpenAddInventory={item => handleOpenAddInventory(item)}
+                  onOpenBookWarehouse={() => handleOpenBookWarehouse()}
+                />
+              )}
+
+              {activeTab === 'movements' && (
+                <StockMovementsPage
+                  onOpenStockMovementModal={() => handleOpenStockMovement()}
+                />
+              )}
+
+              {activeTab === 'notifications' && (
+                <NotificationsPage />
+              )}
+            </>
           )}
 
-          {activeTab === 'bookings' && (
-            <MyBookingsPage
-              onOpenBookWarehouse={() => handleOpenBookWarehouse()}
-            />
-          )}
+          {/* ADMIN-ONLY VIEWS */}
+          {currentUser.role === 'Admin' && (
+            <>
+              {activeTab.startsWith('admin-') && (
+                <AdminDashboard
+                  activeSection={activeTab}
+                  onOpenAddWarehouse={wh => handleOpenAddWarehouse(wh)}
+                  onOpenAddUser={u => handleOpenAddUser(u)}
+                  onOpenAddInventory={i => handleOpenAddInventory(i)}
+                />
+              )}
 
-          {activeTab === 'movements' && (
-            <StockMovementsPage
-              onOpenStockMovementModal={() => handleOpenStockMovement()}
-            />
-          )}
+              {activeTab === 'movements' && (
+                <StockMovementsPage
+                  onOpenStockMovementModal={() => handleOpenStockMovement()}
+                />
+              )}
 
-          {activeTab === 'notifications' && (
-            <NotificationsPage />
-          )}
-
-          {/* WAREHOUSE MANAGER VIEW */}
-          {activeTab === 'manager-operations' && (
-            <WarehouseManagerView
-              onOpenStockMovementModal={item => handleOpenStockMovement(item)}
-            />
-          )}
-
-          {/* ADMIN VIEWS */}
-          {activeTab.startsWith('admin-') && (
-            <AdminDashboard
-              activeSection={activeTab}
-              onOpenAddWarehouse={wh => handleOpenAddWarehouse(wh)}
-              onOpenAddUser={u => handleOpenAddUser(u)}
-              onOpenAddInventory={i => handleOpenAddInventory(i)}
-            />
+              {activeTab === 'notifications' && (
+                <NotificationsPage />
+              )}
+            </>
           )}
         </main>
       </div>
