@@ -5,8 +5,10 @@
       "name": "Kanha Mahajan",
       "email": "kanhamahajan01@gmail.com",
       "phone": "0000000000",
-      "role": "Admin",
+      "password": "050706",
+      "role": "Warehouse Manager",
       "status": "Active",
+      "assignedWarehouseId": "WH-MU13KGYF-NQ1X",
       "createdAt": "2026-09-14T10:02:47.901Z"
     },
     {
@@ -14,7 +16,8 @@
       "name": "Kanha Mahajan",
       "email": "nileshkgn1111@gmail.com",
       "phone": "9876543210",
-      "role": "User",
+      "password": "050706",
+      "role": "Admin",
       "status": "Active",
       "createdAt": "2026-09-14T10:20:09.878Z"
     }
@@ -74,8 +77,6 @@
       "unit": "Boxes",
       "weightSize": "25 kg",
       "storageRequirement": "Standard Ambient",
-      "warehouseId": "WH-MU13KGYF-NQ1X",
-      "warehouseName": "Amax",
       "status": "In Stock",
       "lowStockThreshold": 10,
       "createdAt": "2026-09-14T10:23:26.550Z",
@@ -94,8 +95,6 @@
       "unit": "Units",
       "weightSize": "0.5 kg",
       "storageRequirement": "Standard Ambient",
-      "warehouseId": "WH-MU13KGYF-NQ1X",
-      "warehouseName": "Amax",
       "status": "In Stock",
       "lowStockThreshold": 50,
       "createdAt": "2026-09-14T09:15:00.000Z",

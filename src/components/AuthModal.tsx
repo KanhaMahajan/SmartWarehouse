@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { Role } from '../types';
@@ -35,6 +35,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [hasAdmin, setHasAdmin] = useState(true);
+
+  useEffect(() => {
+    if (isOpen) {
+      api.getAdminStatus()
+        .then(res => {
+          setHasAdmin(res.hasAdmin);
+          if (res.hasAdmin && role === 'Admin') {
+            setRole('User');
+          }
+        })
+        .catch(() => setHasAdmin(true));
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -316,28 +330,58 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Select Role <span className="text-rose-500">*</span>
                 </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(['User', 'Warehouse Manager', 'Admin'] as Role[]).map(r => (
-                    <button
-                      type="button"
-                      key={r}
-                      onClick={() => setRole(r)}
-                      className={`p-2 rounded-lg border text-xs font-semibold flex flex-col items-center justify-center transition-all ${
-                        role === r
-                          ? 'border-blue-600 bg-blue-50/70 text-blue-700 shadow-xs'
-                          : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                      }`}
-                    >
-                      <Shield className={`w-3.5 h-3.5 mb-1 ${role === r ? 'text-blue-600' : 'text-slate-400'}`} />
-                      <span className="text-center">{r}</span>
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  {role === 'Admin' && 'Admins manage warehouses, users, and approve bookings.'}
-                  {role === 'Warehouse Manager' && 'Managers oversee assigned storage facilities and stock in/out.'}
-                  {role === 'User' && 'Standard users register inventory and book warehouse storage.'}
-                </p>
+                {hasAdmin ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(['User', 'Warehouse Manager'] as Role[]).map(r => (
+                        <button
+                          type="button"
+                          key={r}
+                          onClick={() => setRole(r)}
+                          className={`p-2 rounded-lg border text-xs font-semibold flex flex-col items-center justify-center transition-all ${
+                            role === r
+                              ? 'border-blue-600 bg-blue-50/70 text-blue-700 shadow-xs'
+                              : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                          }`}
+                        >
+                          <Shield className={`w-3.5 h-3.5 mb-1 ${role === r ? 'text-blue-600' : 'text-slate-400'}`} />
+                          <span className="text-center">{r}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-2 p-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] text-slate-500 flex items-center gap-1.5">
+                      <span className="font-bold text-slate-700">🛡️ Single Admin Enforced:</span>
+                      <span>Authorized Admin account is already active. New registrations can be Clients or Warehouse Managers.</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(['User', 'Warehouse Manager', 'Admin'] as Role[]).map(r => (
+                        <button
+                          type="button"
+                          key={r}
+                          onClick={() => setRole(r)}
+                          className={`p-2 rounded-lg border text-xs font-semibold flex flex-col items-center justify-center transition-all ${
+                            role === r
+                              ? 'border-blue-600 bg-blue-50/70 text-blue-700 shadow-xs'
+                              : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                          }`}
+                        >
+                          <Shield className={`w-3.5 h-3.5 mb-1 ${role === r ? 'text-blue-600' : 'text-slate-400'}`} />
+                          <span className="text-center">
+                            {r === 'Admin' ? 'Admin (Setup)' : r}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      {role === 'Admin' && 'First-time setup: initialize the sole permanent Admin account.'}
+                      {role === 'Warehouse Manager' && 'Managers oversee assigned storage facilities and stock in/out.'}
+                      {role === 'User' && 'Standard users register inventory and book warehouse storage.'}
+                    </p>
+                  </>
+                )}
               </div>
 
               <button

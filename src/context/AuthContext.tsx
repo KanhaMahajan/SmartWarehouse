@@ -62,8 +62,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           let phone = firebaseUser.phoneNumber || '';
           let name = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
 
-          // Assign Admin role automatically for the project owner email
-          if (firebaseUser.email === 'nileshkgn1111@gmail.com') {
+          // Assign Admin role ONLY for the verified project owner email
+          if (firebaseUser.email?.toLowerCase() === 'nileshkgn1111@gmail.com') {
             role = 'Admin';
           }
 
@@ -71,7 +71,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const userDoc = await getDocFromServer(doc(db, 'users', firebaseUser.uid));
             if (userDoc.exists()) {
               const data = userDoc.data();
-              role = data.role || role;
+              if (firebaseUser.email?.toLowerCase() === 'nileshkgn1111@gmail.com') {
+                role = 'Admin';
+              } else {
+                // Non-admin can only be Warehouse Manager or User
+                role = data.role === 'Warehouse Manager' ? 'Warehouse Manager' : 'User';
+              }
               name = data.name || name;
               phone = data.phone || phone;
             }
@@ -107,9 +112,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const result = await signInWithPopup(auth, googleProvider);
       const fbUser = result.user;
 
-      let role: Role = preferredRole;
-      if (fbUser.email === 'nileshkgn1111@gmail.com') {
+      let role: Role = 'User';
+      if (fbUser.email?.toLowerCase() === 'nileshkgn1111@gmail.com') {
         role = 'Admin';
+      } else {
+        role = preferredRole === 'Warehouse Manager' ? 'Warehouse Manager' : 'User';
       }
 
       const newUser: User = {

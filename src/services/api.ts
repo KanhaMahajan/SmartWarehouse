@@ -47,6 +47,27 @@ export const api = {
       body: JSON.stringify(data)
     }).then(res => handleResponse<{ message: string }>(res)),
 
+  // System & Single-Admin RBAC
+  getAdminStatus: () =>
+    fetch(`${API_BASE}/system/admin-status`).then(res =>
+      handleResponse<{
+        hasAdmin: boolean;
+        adminId: string | null;
+        adminEmail: string | null;
+        adminName: string | null;
+        adminStatus: string | null;
+        singleAdminEnforced: boolean;
+        totalUsers: number;
+      }>(res)
+    ),
+
+  recoverAdmin: (data: { recoveryKey: string; newEmail: string; newPassword: string; newName?: string }) =>
+    fetch(`${API_BASE}/system/admin-recovery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    }).then(res => handleResponse<{ message: string; admin: User }>(res)),
+
   // Users
   getUsers: () => fetch(`${API_BASE}/users`).then(res => handleResponse<User[]>(res)),
   

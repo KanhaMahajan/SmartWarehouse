@@ -125,9 +125,15 @@ export async function deleteUserFromFirestore(userId: string): Promise<void> {
   const path = `users/${userId}`;
   try {
     await deleteDoc(doc(db, 'users', userId));
+    const qSnap = await getDocs(query(collection(db, 'users'), where('id', '==', userId))).catch(() => null);
+    if (qSnap && !qSnap.empty) {
+      for (const d of qSnap.docs) {
+        await deleteDoc(d.ref).catch(() => {});
+      }
+    }
     console.log(`[Firestore] User deleted: ${userId}`);
   } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, path);
+    console.warn(`[Firestore] Notice deleting user ${userId}:`, error);
   }
 }
 

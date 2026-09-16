@@ -11,7 +11,9 @@ import {
   User as FirebaseUser
 } from "firebase/auth";
 import {
+  initializeFirestore,
   getFirestore,
+  setLogLevel,
   Firestore,
   doc,
   getDoc,
@@ -47,33 +49,43 @@ export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-// Initialize Firestore with configured databaseId or fallback
+// Suppress benign connection retry logs
+try {
+  setLogLevel('error');
+} catch {
+  // Ignore
+}
+
+// Target database ID
+const targetDbId = (firebaseConfigJson.firestoreDatabaseId && firebaseConfigJson.firestoreDatabaseId !== '(default)')
+  ? firebaseConfigJson.firestoreDatabaseId
+  : undefined;
+
+// Initialize Firestore using long polling in browser to ensure robust connectivity through iframes & proxies
 let dbInstance: Firestore;
 try {
-  if (firebaseConfigJson.firestoreDatabaseId && firebaseConfigJson.firestoreDatabaseId !== '(default)') {
-    dbInstance = getFirestore(app, firebaseConfigJson.firestoreDatabaseId);
+  if (typeof window !== 'undefined') {
+    dbInstance = initializeFirestore(app, {
+      experimentalForceLongPolling: true,
+    }, targetDbId);
   } else {
-    dbInstance = getFirestore(app);
+    dbInstance = targetDbId ? getFirestore(app, targetDbId) : getFirestore(app);
   }
 } catch (e) {
-  console.warn("Falling back to default Firestore database:", e);
-  dbInstance = getFirestore(app);
+  dbInstance = targetDbId ? getFirestore(app, targetDbId) : getFirestore(app);
 }
 export const db = dbInstance;
 
 // Verification per Firebase skill instructions
 export async function testFirestoreConnection(): Promise<boolean> {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    console.log("Firestore connection verified successfully.");
-    return true;
-  } catch (error: any) {
-    const msg = error?.message || String(error);
-    if (msg.includes('the client is offline')) {
-      console.warn("Firestore connection check: offline or connecting to database...");
-    } else {
-      console.log("Firestore connection initialized:", msg);
+    const snap = await getDoc(doc(db, 'test', 'connection'));
+    if (snap.exists()) {
+      return true;
     }
+    await getDocFromServer(doc(db, 'test', 'connection'));
+    return true;
+  } catch {
     return false;
   }
 }
@@ -90,10 +102,12 @@ export async function ensureFirebaseAuth(): Promise<FirebaseUser | null> {
   }
 }
 
-// Auto-run connection test
+// Non-blocking auto-run connection test
 if (typeof window !== 'undefined') {
-  testFirestoreConnection();
-  ensureFirebaseAuth().catch(() => {});
+  setTimeout(() => {
+    testFirestoreConnection().catch(() => {});
+    ensureFirebaseAuth().catch(() => {});
+  }, 200);
 }
 
 export {

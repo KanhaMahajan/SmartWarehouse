@@ -39,7 +39,10 @@ import {
   Server,
   Cloud,
   Check,
-  Loader2
+  Loader2,
+  Lock,
+  KeyRound,
+  ShieldAlert
 } from 'lucide-react';
 import {
   BarChart,
@@ -86,6 +89,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Deletion and Approval Modals State
   const [deleteCandidateUser, setDeleteCandidateUser] = useState<User | null>(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
   const [deleteCandidateWarehouse, setDeleteCandidateWarehouse] = useState<Warehouse | null>(null);
   const [cancelCandidateBooking, setCancelCandidateBooking] = useState<WarehouseBooking | null>(null);
   const [rejectCandidateBooking, setRejectCandidateBooking] = useState<WarehouseBooking | null>(null);
@@ -295,24 +299,52 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // User delete
   const handleDeleteUser = async () => {
     if (!deleteCandidateUser) return;
+    const userToDelete = deleteCandidateUser;
+
+    if (userToDelete.role === 'Admin') {
+      alert("Security Policy: The primary Admin account cannot be deleted. The system requires exactly one permanent Admin.");
+      setDeleteCandidateUser(null);
+      return;
+    }
+
+    setIsDeletingUser(true);
     try {
-      await api.deleteUser(deleteCandidateUser.id);
+      // 1. Delete from backend API
+      await api.deleteUser(userToDelete.id);
+
+      // 2. Delete from Cloud Firestore
       try {
-        await deleteUserFromFirestore(deleteCandidateUser.id);
+        await deleteUserFromFirestore(userToDelete.id);
       } catch (fsErr) {
         console.warn('Firestore delete user notice:', fsErr);
       }
-      setUsers(prev => prev.filter(u => u.id !== deleteCandidateUser.id));
+
+      // 3. Immediately filter out from UI
+      setUsers(prev => prev.filter(u => u.id !== userToDelete.id && u.email !== userToDelete.email));
+      setSyncMessage(`User "${userToDelete.name}" (${userToDelete.email}) deleted successfully.`);
+      setTimeout(() => setSyncMessage(null), 4000);
+
+      // 4. Close modal
       setDeleteCandidateUser(null);
-      loadData();
-      refreshFirestoreStats();
+
+      // 5. Reload data & refresh database stats
+      await loadData();
+      await refreshFirestoreStats();
     } catch (err: any) {
       console.error('Delete failed', err);
+      alert(err.message || 'Failed to delete user account');
+    } finally {
+      setIsDeletingUser(false);
+      setDeleteCandidateUser(null);
     }
   };
 
   // Toggle user status
   const handleToggleUserStatus = async (user: User) => {
+    if (user.role === 'Admin') {
+      alert("Security Policy: The primary Admin account is permanent and cannot be deactivated via standard user management. Use System Recovery if necessary.");
+      return;
+    }
     const nextStatus = user.status === 'Active' ? 'Inactive' : 'Active';
     try {
       await api.updateUser(user.id, { status: nextStatus });
@@ -324,6 +356,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setUsers(prev => prev.map(u => (u.id === user.id ? { ...u, status: nextStatus } : u)));
     } catch (err: any) {
       alert(err.message || 'Failed to update user');
+    }
+  };
+
+  // System Admin Recovery State
+  const [showRecoveryModal, setShowRecoveryModal] = useState(false);
+  const [recoveryKey, setRecoveryKey] = useState('');
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [recoveryPassword, setRecoveryPassword] = useState('');
+  const [recoveryName, setRecoveryName] = useState('');
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [recoveryResult, setRecoveryResult] = useState<{ success?: boolean; message?: string } | null>(null);
+
+  const handleExecuteRecovery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRecoveryLoading(true);
+    setRecoveryResult(null);
+    try {
+      const res = await api.recoverAdmin({
+        recoveryKey,
+        newEmail: recoveryEmail,
+        newPassword: recoveryPassword,
+        newName: recoveryName
+      });
+      setRecoveryResult({ success: true, message: res.message });
+      await loadData();
+      setTimeout(() => {
+        setShowRecoveryModal(false);
+        setRecoveryResult(null);
+        setRecoveryKey('');
+        setRecoveryEmail('');
+        setRecoveryPassword('');
+        setRecoveryName('');
+      }, 2000);
+    } catch (err: any) {
+      setRecoveryResult({ success: false, message: err.message || 'Admin recovery failed. Check your recovery key.' });
+    } finally {
+      setRecoveryLoading(false);
     }
   };
 
@@ -459,31 +528,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
 
-        {/* Live Firestore Document Statistics */}
+        {/* Live Document Statistics */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-3 pt-3 border-t border-blue-100">
           <div className="bg-white/90 border border-slate-200/80 rounded-xl px-3 py-2">
-            <div className="text-[11px] text-slate-500 font-medium">Warehouses in Firestore</div>
+            <div className="text-[11px] text-slate-500 font-medium">Warehouses</div>
             <div className="text-lg font-bold font-mono text-slate-900 flex items-center justify-between">
               <span>{firestoreStats ? firestoreStats.warehousesCount : warehouses.length}</span>
               <span className="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded font-sans font-medium">Stored</span>
             </div>
           </div>
           <div className="bg-white/90 border border-slate-200/80 rounded-xl px-3 py-2">
-            <div className="text-[11px] text-slate-500 font-medium">Inventory Items in Firestore</div>
+            <div className="text-[11px] text-slate-500 font-medium">Inventory Items</div>
             <div className="text-lg font-bold font-mono text-slate-900 flex items-center justify-between">
               <span>{firestoreStats ? firestoreStats.inventoryCount : inventory.length}</span>
               <span className="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded font-sans font-medium">Stored</span>
             </div>
           </div>
           <div className="bg-white/90 border border-slate-200/80 rounded-xl px-3 py-2">
-            <div className="text-[11px] text-slate-500 font-medium">Bookings in Firestore</div>
+            <div className="text-[11px] text-slate-500 font-medium">Bookings</div>
             <div className="text-lg font-bold font-mono text-slate-900 flex items-center justify-between">
               <span>{firestoreStats ? firestoreStats.bookingsCount : bookings.length}</span>
               <span className="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded font-sans font-medium">Stored</span>
             </div>
           </div>
           <div className="bg-white/90 border border-slate-200/80 rounded-xl px-3 py-2">
-            <div className="text-[11px] text-slate-500 font-medium">Users in Firestore</div>
+            <div className="text-[11px] text-slate-500 font-medium">Users</div>
             <div className="text-lg font-bold font-mono text-slate-900 flex items-center justify-between">
               <span>{firestoreStats ? firestoreStats.usersCount : users.length}</span>
               <span className="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded font-sans font-medium">Stored</span>
@@ -1052,6 +1121,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* USER MANAGEMENT SECTION */}
       {isUsers && (
         <div className="space-y-4">
+          {/* Single-Admin RBAC Security Banner */}
+          <div className="p-4 bg-gradient-to-r from-blue-900 to-slate-900 border border-blue-800/80 rounded-2xl text-white shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 bg-blue-600/30 border border-blue-500/40 rounded-xl text-blue-300 shrink-0">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-white">Single-Admin System Policy Active</h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-400/30">
+                    Enforced (1 Admin Max)
+                  </span>
+                </div>
+                <p className="text-xs text-blue-200/80 mt-1 max-w-2xl leading-relaxed">
+                  The system enforces strict RBAC: only <strong>ONE permanent Administrator</strong> account can exist.
+                  Admins can create and manage Warehouse Managers and Users, but cannot create another Admin.
+                  Role promotion to Admin is locked.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setShowRecoveryModal(true)}
+                className="px-3.5 py-2 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-amber-300" />
+                <span>Admin Recovery Console</span>
+              </button>
+            </div>
+          </div>
+
           <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-xs flex items-center justify-between gap-4">
             <div className="relative flex-1 max-w-md">
               <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
@@ -1104,37 +1204,59 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       .map(u => (
                         <tr key={u.id} className="hover:bg-slate-50/70 transition-colors">
                           <td className="py-3.5 px-4">
-                            <div className="font-bold text-slate-900">{u.name}</div>
+                            <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                              {u.name}
+                              {u.role === 'Admin' && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800">
+                                  Sole Admin
+                                </span>
+                              )}
+                            </div>
                             <div className="text-[11px] text-slate-500">{u.email}</div>
                           </td>
                           <td className="py-3.5 px-4 text-slate-600">
                             {u.phone || <span className="text-slate-400 italic">None</span>}
                           </td>
                           <td className="py-3.5 px-4">
-                            <span
-                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                                u.role === 'Admin'
-                                  ? 'bg-blue-100 text-blue-800'
-                                  : u.role === 'Warehouse Manager'
-                                  ? 'bg-indigo-100 text-indigo-800'
-                                  : 'bg-emerald-100 text-emerald-800'
-                              }`}
-                            >
-                              {u.role}
-                            </span>
+                            {u.role === 'Admin' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                                <ShieldCheck className="w-3 h-3 text-blue-700" />
+                                Admin (Unique & Permanent)
+                              </span>
+                            ) : (
+                              <span
+                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                  u.role === 'Warehouse Manager'
+                                    ? 'bg-indigo-100 text-indigo-800'
+                                    : 'bg-emerald-100 text-emerald-800'
+                                }`}
+                              >
+                                {u.role}
+                              </span>
+                            )}
                           </td>
                           <td className="py-3.5 px-4">
-                            <button
-                              onClick={() => handleToggleUserStatus(u)}
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition-colors ${
-                                u.status === 'Active'
-                                  ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                                  : 'bg-rose-100 text-rose-800 hover:bg-rose-200'
-                              }`}
-                              title="Click to toggle status"
-                            >
-                              {u.status}
-                            </button>
+                            {u.role === 'Admin' ? (
+                              <span
+                                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default"
+                                title="The primary Admin account is permanent and cannot be deactivated via standard user directory"
+                              >
+                                <Lock className="w-2.5 h-2.5" />
+                                Active (Protected)
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => handleToggleUserStatus(u)}
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition-colors ${
+                                  u.status === 'Active'
+                                    ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                                    : 'bg-rose-100 text-rose-800 hover:bg-rose-200'
+                                }`}
+                                title="Click to toggle status"
+                              >
+                                {u.status}
+                              </button>
+                            )}
                           </td>
                           <td className="py-3.5 px-4 text-slate-500 font-mono text-[11px]">
                             {new Date(u.createdAt).toLocaleDateString()}
@@ -1148,13 +1270,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               >
                                 <Edit2 className="w-3.5 h-3.5" />
                               </button>
-                              <button
-                                onClick={() => setDeleteCandidateUser(u)}
-                                className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50"
-                                title="Delete user"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              {u.role === 'Admin' ? (
+                                <button
+                                  disabled
+                                  className="p-1.5 rounded-lg text-slate-300 cursor-not-allowed"
+                                  title="Security Policy: The primary Admin account cannot be deleted or replaced via standard user-management."
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => setDeleteCandidateUser(u)}
+                                  className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50"
+                                  title="Delete user"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1368,6 +1500,127 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin System Recovery Console Modal */}
+      {showRecoveryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 border border-slate-200 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-100">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                <ShieldAlert className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">System Admin Recovery Console</h3>
+                <p className="text-xs text-slate-500">Secure single-Admin credential reset</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 mb-4 leading-relaxed">
+              In accordance with single-Admin RBAC rules, the Admin account cannot be transferred or assigned through normal user management. If the Admin account requires credential rotation or recovery, supply the secure server-level master key below.
+            </p>
+
+            <form onSubmit={handleExecuteRecovery} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Master System Recovery Key <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Enter system recovery key..."
+                  value={recoveryKey}
+                  onChange={e => setRecoveryKey(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-hidden font-mono"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">Default environment key: SYS-ADMIN-RECOVERY-SECURE-KEY-2026</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  New / Verified Admin Email <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="nileshkgn1111@gmail.com"
+                  value={recoveryEmail}
+                  onChange={e => setRecoveryEmail(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  New Admin Password <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Enter secure password..."
+                  value={recoveryPassword}
+                  onChange={e => setRecoveryPassword(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Admin Display Name (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Kanha Mahajan"
+                  value={recoveryName}
+                  onChange={e => setRecoveryName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                />
+              </div>
+
+              {recoveryResult && (
+                <div
+                  className={`p-3 rounded-xl text-xs font-semibold ${
+                    recoveryResult.success
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                      : 'bg-rose-50 text-rose-800 border border-rose-200'
+                  }`}
+                >
+                  {recoveryResult.message}
+                </div>
+              )}
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRecoveryModal(false);
+                    setRecoveryResult(null);
+                  }}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={recoveryLoading}
+                  className="px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-xs transition-colors flex items-center gap-1.5 disabled:opacity-60"
+                >
+                  {recoveryLoading ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Verifying...</span>
+                    </>
+                  ) : (
+                    <>
+                      <KeyRound className="w-3.5 h-3.5" />
+                      <span>Authorize & Reset Admin</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -104,14 +104,80 @@ interface DbSchema {
 const DATA_DIR = path.join(process.cwd(), "data");
 const DB_FILE = path.join(DATA_DIR, "db.json");
 
+const DEFAULT_WAREHOUSES: DbSchema['warehouses'] = [
+  {
+    id: "WH-MU13KGYF-NQ1X",
+    name: "Amax",
+    location: "Mumbai, Maharashtra",
+    totalCapacity: 5000,
+    availableSpace: 5000,
+    storageType: "Standard Ambient",
+    pricePerMonth: 19,
+    status: "Available",
+    description: "Prime distribution facility in Mumbai industrial zone with multi-bay loading docks.",
+    createdAt: "2026-09-14T10:25:40.311Z",
+    updatedAt: "2026-09-14T10:25:40.311Z"
+  },
+  {
+    id: "WH-PN10B24X-K981",
+    name: "Pune Logistics Hub",
+    location: "Pune, Maharashtra",
+    totalCapacity: 12000,
+    availableSpace: 9500,
+    storageType: "Cold Storage",
+    pricePerMonth: 28,
+    status: "Available",
+    description: "Temperature-controlled cold chain facility for pharmaceuticals and food products (-18°C to +4°C).",
+    createdAt: "2026-09-14T08:00:00.000Z",
+    updatedAt: "2026-09-14T08:00:00.000Z"
+  },
+  {
+    id: "WH-BL12C88Y-M223",
+    name: "Bangalore Central Fulfillment",
+    location: "Bangalore, Karnataka",
+    totalCapacity: 25000,
+    availableSpace: 18000,
+    storageType: "Standard Ambient",
+    pricePerMonth: 22,
+    status: "Available",
+    description: "High-throughput multi-bay eCommerce distribution and pallet storage depot near Outer Ring Road.",
+    createdAt: "2026-09-14T08:00:00.000Z",
+    updatedAt: "2026-09-14T08:00:00.000Z"
+  }
+];
+
+const DEFAULT_USERS: DbSchema['users'] = [
+  {
+    id: "USR-MU12R1ZX-VYPY",
+    name: "Kanha Mahajan",
+    email: "kanhamahajan01@gmail.com",
+    phone: "0000000000",
+    password: "050706",
+    role: "Warehouse Manager",
+    status: "Active",
+    assignedWarehouseId: "WH-MU13KGYF-NQ1X",
+    createdAt: "2026-09-14T10:02:47.901Z"
+  },
+  {
+    id: "USR-MU13DDZQ-FEFY",
+    name: "Kanha Mahajan",
+    email: "nileshkgn1111@gmail.com",
+    phone: "9876543210",
+    password: "050706",
+    role: "Admin",
+    status: "Active",
+    createdAt: "2026-09-14T10:20:09.878Z"
+  }
+];
+
 function ensureDb(): DbSchema {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
 
   const emptyDb: DbSchema = {
-    users: [],
-    warehouses: [],
+    users: DEFAULT_USERS,
+    warehouses: DEFAULT_WAREHOUSES,
     inventory: [],
     bookings: [],
     stockMovements: [],
@@ -126,14 +192,41 @@ function ensureDb(): DbSchema {
   try {
     const raw = fs.readFileSync(DB_FILE, "utf8");
     const data = JSON.parse(raw);
-    return {
-      users: Array.isArray(data.users) ? data.users : [],
-      warehouses: Array.isArray(data.warehouses) ? data.warehouses : [],
-      inventory: Array.isArray(data.inventory) ? data.inventory : [],
-      bookings: Array.isArray(data.bookings) ? data.bookings : [],
-      stockMovements: Array.isArray(data.stockMovements) ? data.stockMovements : [],
-      notifications: Array.isArray(data.notifications) ? data.notifications : []
+    const users: DbSchema['users'] = Array.isArray(data.users) ? data.users : DEFAULT_USERS;
+    const warehouses = Array.isArray(data.warehouses) ? data.warehouses : DEFAULT_WAREHOUSES;
+    const inventory = Array.isArray(data.inventory) ? data.inventory : [];
+    const bookings = Array.isArray(data.bookings) ? data.bookings : [];
+    const stockMovements = Array.isArray(data.stockMovements) ? data.stockMovements : [];
+    const notifications = Array.isArray(data.notifications) ? data.notifications : [];
+
+    // Enforce SINGLE-ADMIN rule at the database storage level:
+    const adminUsers = users.filter(u => u.role === "Admin");
+    if (adminUsers.length > 1) {
+      console.warn(`[RBAC Policy] Detected ${adminUsers.length} Admin accounts in DB. Enforcing single-Admin constraint.`);
+      // Preserve the primary authorized admin (nileshkgn1111@gmail.com or the first registered admin)
+      const primaryAdmin = adminUsers.find(u => u.email.toLowerCase() === "nileshkgn1111@gmail.com") || adminUsers[0];
+      for (const u of users) {
+        if (u.role === "Admin" && u.id !== primaryAdmin.id) {
+          u.role = "Warehouse Manager";
+          console.warn(`[RBAC Policy] Demoted duplicate Admin ${u.email} to Warehouse Manager.`);
+        }
+      }
+    }
+
+    const current: DbSchema = {
+      users,
+      warehouses,
+      inventory,
+      bookings,
+      stockMovements,
+      notifications
     };
+
+    if (!Array.isArray(data.warehouses) || !Array.isArray(data.users) || adminUsers.length > 1) {
+      fs.writeFileSync(DB_FILE, JSON.stringify(current, null, 2), "utf8");
+    }
+
+    return current;
   } catch {
     fs.writeFileSync(DB_FILE, JSON.stringify(emptyDb, null, 2), "utf8");
     return emptyDb;
@@ -196,6 +289,73 @@ async function startServer() {
   });
 
   // 1. AUTH ROUTES
+  app.get("/api/system/admin-status", (_req, res) => {
+    const db = ensureDb();
+    const admin = db.users.find(u => u.role === "Admin");
+    res.json({
+      hasAdmin: !!admin,
+      adminId: admin ? admin.id : null,
+      adminEmail: admin ? admin.email : null,
+      adminName: admin ? admin.name : null,
+      adminStatus: admin ? admin.status : null,
+      singleAdminEnforced: true,
+      totalUsers: db.users.length
+    });
+  });
+
+  app.post("/api/system/admin-recovery", (req, res) => {
+    const { recoveryKey, newEmail, newPassword, newName } = req.body;
+    const MASTER_KEY = process.env.ADMIN_RECOVERY_KEY || "SYS-ADMIN-RECOVERY-SECURE-KEY-2026";
+
+    if (!recoveryKey || recoveryKey.trim() !== MASTER_KEY) {
+      return res.status(401).json({
+        error: "Invalid System Recovery Key. Unauthorized recovery attempt rejected."
+      });
+    }
+
+    if (!newEmail || !newPassword) {
+      return res.status(400).json({ error: "New Admin email and password are required for recovery." });
+    }
+
+    const db = ensureDb();
+    let admin = db.users.find(u => u.role === "Admin");
+
+    if (admin) {
+      // Securely reset existing admin
+      admin.email = newEmail.trim().toLowerCase();
+      admin.password = newPassword.trim();
+      if (newName) admin.name = newName.trim();
+      admin.status = "Active";
+      writeDb(db);
+      console.log(`[Security Alert] System Admin account recovered/reset for ${admin.email}`);
+      const { password: _, ...adminSafe } = admin;
+      return res.json({
+        message: "System Admin account recovered and credentials updated successfully.",
+        admin: adminSafe
+      });
+    } else {
+      // System has no admin (e.g. wiped or initial provisioning)
+      const newAdmin = {
+        id: generateId("USR"),
+        name: (newName || "System Administrator").trim(),
+        email: newEmail.trim().toLowerCase(),
+        phone: "",
+        password: newPassword.trim(),
+        role: "Admin" as const,
+        status: "Active" as const,
+        createdAt: new Date().toISOString()
+      };
+      db.users.push(newAdmin);
+      writeDb(db);
+      console.log(`[Security Alert] Single System Admin provisioned via recovery key: ${newAdmin.email}`);
+      const { password: _, ...adminSafe } = newAdmin;
+      return res.status(201).json({
+        message: "Primary System Admin account provisioned successfully.",
+        admin: adminSafe
+      });
+    }
+  });
+
   app.post("/api/auth/register", (req, res) => {
     const { name, email, phone, password, role = "User" } = req.body;
     if (!name || !email || !password) {
@@ -208,8 +368,22 @@ async function startServer() {
       return res.status(400).json({ error: "User with this email already exists" });
     }
 
-    const validRoles = ["Admin", "Warehouse Manager", "User"];
-    const userRole = validRoles.includes(role) ? role : "User";
+    // RBAC: Check Single-Admin rule
+    const hasAdmin = db.users.some(u => u.role === "Admin");
+    let userRole: 'Admin' | 'Warehouse Manager' | 'User' = 'User';
+
+    if (role === "Admin") {
+      if (hasAdmin) {
+        return res.status(403).json({
+          error: "Single-Admin Policy: An authorized Admin account already exists. Only ONE Admin account is permitted in the entire system."
+        });
+      }
+      userRole = "Admin";
+    } else if (role === "Warehouse Manager") {
+      userRole = "Warehouse Manager";
+    } else {
+      userRole = "User";
+    }
 
     const newUser = {
       id: generateId("USR"),
@@ -217,7 +391,7 @@ async function startServer() {
       email: email.trim().toLowerCase(),
       phone: (phone || "").trim(),
       password: password.trim(),
-      role: userRole as 'Admin' | 'Warehouse Manager' | 'User',
+      role: userRole,
       status: "Active" as const,
       createdAt: new Date().toISOString()
     };
@@ -295,13 +469,22 @@ async function startServer() {
       return res.status(400).json({ error: "Email is already registered" });
     }
 
+    // RBAC: Admin CANNOT create another Admin. Single Admin is unique and permanent.
+    if (role === "Admin") {
+      return res.status(403).json({
+        error: "Security Policy: Only ONE Admin account is permitted in the system. Administrators cannot create another Admin."
+      });
+    }
+
+    const targetRole: 'Warehouse Manager' | 'User' = role === "Warehouse Manager" ? "Warehouse Manager" : "User";
+
     const newUser = {
       id: generateId("USR"),
       name: name.trim(),
       email: email.trim().toLowerCase(),
       phone: (phone || "").trim(),
       password: password || "temp123",
-      role: (role as 'Admin' | 'Warehouse Manager' | 'User') || "User",
+      role: targetRole,
       status: (status as 'Active' | 'Inactive') || "Active",
       assignedWarehouseId,
       createdAt: new Date().toISOString()
@@ -324,11 +507,34 @@ async function startServer() {
       return res.status(404).json({ error: "User not found" });
     }
 
+    // RBAC: Enforce single-Admin immutability
+    if (user.role === "Admin") {
+      if (role && role !== "Admin") {
+        return res.status(403).json({
+          error: "The Admin role is unique and permanent and cannot be demoted or transferred through user management."
+        });
+      }
+      if (status === "Inactive") {
+        return res.status(403).json({
+          error: "The primary Admin account cannot be deactivated via standard user management. Use System Recovery if necessary."
+        });
+      }
+    } else {
+      // User is not Admin: cannot be promoted to Admin
+      if (role === "Admin") {
+        return res.status(403).json({
+          error: "Security Policy: Only ONE Admin account can exist in the system. Other users cannot be promoted to Admin."
+        });
+      }
+    }
+
     if (name) user.name = name.trim();
     if (email) user.email = email.trim().toLowerCase();
     if (phone !== undefined) user.phone = phone.trim();
-    if (role) user.role = role;
-    if (status) user.status = status;
+    if (role && (user.role !== "Admin" || role === "Admin")) {
+      user.role = role === "Warehouse Manager" ? "Warehouse Manager" : (user.role === "Admin" ? "Admin" : "User");
+    }
+    if (status && user.role !== "Admin") user.status = status;
     if (assignedWarehouseId !== undefined) user.assignedWarehouseId = assignedWarehouseId;
     if (password) user.password = password;
 
@@ -340,13 +546,34 @@ async function startServer() {
   app.delete("/api/users/:id", (req, res) => {
     const { id } = req.params;
     const db = ensureDb();
-    const index = db.users.findIndex(u => u.id === id);
-    if (index === -1) {
-      return res.status(404).json({ error: "User not found" });
+    const user = db.users.find(
+      u => u.id === id || u.id.toLowerCase() === id.toLowerCase() || u.email.toLowerCase() === id.toLowerCase()
+    );
+
+    if (!user) {
+      return res.json({ message: "User deleted or already removed", id });
     }
-    const removed = db.users.splice(index, 1);
+
+    // RBAC: Primary Admin account cannot be deleted through standard user-management
+    if (user.role === "Admin") {
+      return res.status(403).json({
+        error: "Security Policy: The primary Admin account cannot be deleted or replaced via standard user-management. If recovery is needed, use the System Recovery console."
+      });
+    }
+
+    const index = db.users.indexOf(user);
+    const removed = db.users.splice(index, 1)[0];
+    
+    // Clear manager assignment from any warehouses
+    db.warehouses.forEach(w => {
+      if (w.assignedManagerId === removed.id || w.assignedManagerId === id) {
+        w.assignedManagerId = undefined;
+        w.assignedManagerName = undefined;
+      }
+    });
+
     writeDb(db);
-    res.json({ message: "User deleted successfully", user: removed[0] });
+    res.json({ message: "User deleted successfully", user: removed });
   });
 
   // 3. WAREHOUSE MANAGEMENT

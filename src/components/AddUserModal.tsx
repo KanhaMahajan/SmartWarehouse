@@ -192,31 +192,64 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Assigned Role
               </label>
-              <select
-                id="user-role-select"
-                value={role}
-                onChange={e => setRole(e.target.value as Role)}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              >
-                <option value="User">User</option>
-                <option value="Warehouse Manager">Warehouse Manager</option>
-                <option value="Admin">Admin</option>
-              </select>
+              {editUser?.role === 'Admin' ? (
+                <div>
+                  <select
+                    id="user-role-select"
+                    value="Admin"
+                    disabled
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-slate-100 text-slate-700 cursor-not-allowed font-semibold"
+                  >
+                    <option value="Admin">👑 Admin (Unique & Permanent)</option>
+                  </select>
+                </div>
+              ) : (
+                <select
+                  id="user-role-select"
+                  value={role === 'Admin' ? 'User' : role}
+                  onChange={e => setRole(e.target.value as Role)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="User">User (Client Account)</option>
+                  <option value="Warehouse Manager">Warehouse Manager</option>
+                </select>
+              )}
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Account Status
               </label>
-              <select
-                id="user-status-select"
-                value={status}
-                onChange={e => setStatus(e.target.value as 'Active' | 'Inactive')}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              >
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive / Deactivated</option>
-              </select>
+              {editUser?.role === 'Admin' ? (
+                <select
+                  id="user-status-select"
+                  value="Active"
+                  disabled
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-slate-100 text-slate-700 cursor-not-allowed font-semibold"
+                >
+                  <option value="Active">Active (Protected Admin)</option>
+                </select>
+              ) : (
+                <select
+                  id="user-status-select"
+                  value={status}
+                  onChange={e => setStatus(e.target.value as 'Active' | 'Inactive')}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive / Deactivated</option>
+                </select>
+              )}
+            </div>
+          </div>
+
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-600 flex items-start gap-2">
+            <span className="text-blue-600 font-bold">🔒</span>
+            <div>
+              <span className="font-semibold text-slate-800">Single-Admin System Constraint:</span>{' '}
+              {editUser?.role === 'Admin'
+                ? 'The primary Admin account cannot be demoted, duplicated, or transferred. Use the System Recovery process if credentials need resetting.'
+                : 'The system permits exactly ONE permanent Admin account. New accounts can only be provisioned as Users or Warehouse Managers.'}
             </div>
           </div>
 
