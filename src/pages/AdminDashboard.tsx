@@ -12,6 +12,8 @@ import {
   saveUserToFirestore,
   deleteWarehouseFromFirestore,
   deleteUserFromFirestore,
+  deleteBookingFromFirestore,
+  deleteInventoryItemFromFirestore,
   getFirestoreDatabaseStats,
   syncAllDataToFirestore,
   FirestoreDatabaseStats
@@ -91,6 +93,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [deleteCandidateUser, setDeleteCandidateUser] = useState<User | null>(null);
   const [isDeletingUser, setIsDeletingUser] = useState(false);
   const [deleteCandidateWarehouse, setDeleteCandidateWarehouse] = useState<Warehouse | null>(null);
+  const [deleteCandidateBooking, setDeleteCandidateBooking] = useState<WarehouseBooking | null>(null);
+  const [deleteCandidateInventory, setDeleteCandidateInventory] = useState<InventoryItem | null>(null);
   const [cancelCandidateBooking, setCancelCandidateBooking] = useState<WarehouseBooking | null>(null);
   const [rejectCandidateBooking, setRejectCandidateBooking] = useState<WarehouseBooking | null>(null);
   const [rejectionReasonInput, setRejectionReasonInput] = useState('Warehouse capacity constraints');
@@ -274,6 +278,82 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       await loadData();
     } finally {
       setActionLoadingId(null);
+    }
+  };
+
+  // Booking permanent delete
+  const handleDeleteBooking = async () => {
+    if (!deleteCandidateBooking) return;
+    const bkg = deleteCandidateBooking;
+    const id = bkg.id;
+    setDeleteCandidateBooking(null);
+    setActionLoadingId(id);
+
+    // Optimistically remove from state
+    setBookings(prev => prev.filter(b => b.id !== id));
+
+    // If it had occupied warehouse space, restore warehouse capacity in state
+    if (bkg.status === 'Approved' || bkg.status === 'Active') {
+      setWarehouses(prev =>
+        prev.map(w => {
+          if (w.id === bkg.warehouseId) {
+            const restoredSpace = Math.min(w.totalCapacity, w.availableSpace + bkg.requiredSpace);
+            return {
+              ...w,
+              availableSpace: restoredSpace,
+              status: restoredSpace >= w.totalCapacity ? 'Available' : w.status
+            };
+          }
+          return w;
+        })
+      );
+    }
+
+    try {
+      await api.deleteBooking(id);
+      try {
+        await deleteBookingFromFirestore(id);
+      } catch (fsErr) {
+        console.warn('Firestore delete booking notice:', fsErr);
+      }
+      setSyncMessage(`Booking #${id} deleted permanently.`);
+      setTimeout(() => setSyncMessage(null), 4000);
+      await loadData();
+      refreshFirestoreStats().catch(() => {});
+    } catch (err: any) {
+      console.error('Delete booking failed', err);
+      alert(err.message || 'Failed to delete booking');
+      await loadData();
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // Master Inventory delete
+  const handleDeleteInventory = async () => {
+    if (!deleteCandidateInventory) return;
+    const item = deleteCandidateInventory;
+    const id = item.id;
+    setDeleteCandidateInventory(null);
+
+    // Optimistically remove from state
+    setInventory(prev => prev.filter(i => i.id !== id));
+
+    try {
+      await api.deleteInventory(id);
+      try {
+        await deleteInventoryItemFromFirestore(id);
+      } catch (fsErr) {
+        console.warn('Firestore delete inventory item notice:', fsErr);
+      }
+      setSyncMessage(`Master Inventory item "${item.name}" deleted.`);
+      setTimeout(() => setSyncMessage(null), 4000);
+      await loadData();
+      refreshFirestoreStats().catch(() => {});
+    } catch (err: any) {
+      console.error('Delete inventory item failed', err);
+      alert(err.message || 'Failed to delete inventory item');
+      await loadData();
     }
   };
 
@@ -929,62 +1009,73 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             )}
                           </td>
                           <td className="py-3.5 px-4 text-right">
-                            {b.status === 'Pending' ? (
-                              <div className="flex items-center justify-end gap-1.5">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {b.status === 'Pending' ? (
+                                <>
+                                  <button
+                                    onClick={() => setCancelCandidateBooking(b)}
+                                    disabled={actionLoadingId === b.id}
+                                    className="px-2.5 py-1 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors"
+                                    title="Cancel this booking"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setRejectCandidateBooking(b);
+                                      setRejectionReasonInput('Warehouse capacity constraints');
+                                    }}
+                                    disabled={actionLoadingId === b.id}
+                                    className="px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200 transition-colors"
+                                  >
+                                    Reject
+                                  </button>
+                                  <button
+                                    onClick={() => handleApproveBooking(b.id)}
+                                    disabled={actionLoadingId === b.id}
+                                    className="px-3 py-1 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-xs flex items-center gap-1 transition-colors"
+                                  >
+                                    {actionLoadingId === b.id ? (
+                                      <>
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                        <span>Approving...</span>
+                                      </>
+                                    ) : (
+                                      'Approve'
+                                    )}
+                                  </button>
+                                </>
+                              ) : (b.status === 'Approved' || b.status === 'Active') ? (
                                 <button
                                   onClick={() => setCancelCandidateBooking(b)}
                                   disabled={actionLoadingId === b.id}
-                                  className="px-2.5 py-1 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors"
-                                  title="Cancel this booking"
-                                >
-                                  Cancel
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setRejectCandidateBooking(b);
-                                    setRejectionReasonInput('Warehouse capacity constraints');
-                                  }}
-                                  disabled={actionLoadingId === b.id}
-                                  className="px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200 transition-colors"
-                                >
-                                  Reject
-                                </button>
-                                <button
-                                  onClick={() => handleApproveBooking(b.id)}
-                                  disabled={actionLoadingId === b.id}
-                                  className="px-3 py-1 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-xs flex items-center gap-1 transition-colors"
+                                  className="px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors flex items-center gap-1.5"
                                 >
                                   {actionLoadingId === b.id ? (
                                     <>
                                       <Loader2 className="w-3 h-3 animate-spin" />
-                                      <span>Approving...</span>
+                                      <span>Cancelling...</span>
                                     </>
                                   ) : (
-                                    'Approve'
+                                    <>
+                                      <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                                      <span>Cancel Booking</span>
+                                    </>
                                   )}
                                 </button>
-                              </div>
-                            ) : (b.status === 'Approved' || b.status === 'Active') ? (
+                              ) : (
+                                <span className="text-slate-400 text-[11px] font-medium italic mr-1">{b.status}</span>
+                              )}
+
                               <button
-                                onClick={() => setCancelCandidateBooking(b)}
+                                onClick={() => setDeleteCandidateBooking(b)}
                                 disabled={actionLoadingId === b.id}
-                                className="px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors flex items-center gap-1.5 ml-auto"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                title="Permanently delete booking record"
                               >
-                                {actionLoadingId === b.id ? (
-                                  <>
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                    <span>Cancelling...</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <XCircle className="w-3.5 h-3.5 text-rose-600" />
-                                    <span>Cancel Booking</span>
-                                  </>
-                                )}
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
-                            ) : (
-                              <span className="text-slate-400 text-[11px] font-medium italic">{b.status}</span>
-                            )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -1105,6 +1196,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 title="Edit item"
                               >
                                 <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setDeleteCandidateInventory(item)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                title="Delete master inventory item"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
                           </td>
@@ -1621,6 +1719,125 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Booking Confirmation Modal */}
+      {deleteCandidateBooking && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 border border-slate-200 shadow-xl">
+            <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-3">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900 text-center">Delete Booking Record</h3>
+            <p className="text-xs text-slate-500 text-center mt-1">
+              Permanently delete booking record #{deleteCandidateBooking.id}? If this booking had reserved warehouse capacity, space will be restored.
+            </p>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 my-4 text-xs space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Booking ID:</span>
+                <span className="font-mono font-bold text-slate-900">#{deleteCandidateBooking.id}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Client:</span>
+                <span className="font-semibold text-slate-900">{deleteCandidateBooking.userName}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Warehouse:</span>
+                <span className="font-semibold text-slate-900">{deleteCandidateBooking.warehouseName}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Status:</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-800">
+                  {deleteCandidateBooking.status}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteCandidateBooking(null)}
+                disabled={actionLoadingId === deleteCandidateBooking.id}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteBooking}
+                disabled={actionLoadingId === deleteCandidateBooking.id}
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-colors flex items-center gap-1.5 disabled:opacity-60"
+              >
+                {actionLoadingId === deleteCandidateBooking.id ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Yes, Delete Booking</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Master Inventory Confirmation Modal */}
+      {deleteCandidateInventory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 border border-slate-200 shadow-xl">
+            <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-3">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900 text-center">Delete Master Inventory Item</h3>
+            <p className="text-xs text-slate-500 text-center mt-1">
+              Are you sure you want to delete <strong>{deleteCandidateInventory.name}</strong> ({deleteCandidateInventory.sku}) from Master Inventory?
+            </p>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 my-4 text-xs space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Item Name:</span>
+                <span className="font-bold text-slate-900">{deleteCandidateInventory.name}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">SKU:</span>
+                <span className="font-mono font-bold text-slate-900">{deleteCandidateInventory.sku}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Client / Owner:</span>
+                <span className="font-semibold text-slate-900">{deleteCandidateInventory.userName}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Quantity & Status:</span>
+                <span className="font-bold text-slate-900">
+                  {deleteCandidateInventory.quantity} {deleteCandidateInventory.unit} ({deleteCandidateInventory.status})
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteCandidateInventory(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteInventory}
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Yes, Delete Item</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

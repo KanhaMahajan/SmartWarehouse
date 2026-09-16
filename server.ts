@@ -1109,6 +1109,33 @@ async function startServer() {
     res.json(booking);
   });
 
+  app.delete("/api/bookings/:id", (req, res) => {
+    const { id } = req.params;
+    const db = ensureDb();
+    const index = db.bookings.findIndex(b => b.id === id);
+    if (index === -1) {
+      return res.status(404).json({ error: "Booking not found" });
+    }
+
+    const removed = db.bookings.splice(index, 1)[0];
+
+    // If it was active or approved, restore the space to warehouse
+    if (removed.status === "Approved" || removed.status === "Active") {
+      const wh = db.warehouses.find(w => w.id === removed.warehouseId);
+      if (wh) {
+        wh.availableSpace = Math.min(wh.totalCapacity, wh.availableSpace + removed.requiredSpace);
+        const used = wh.totalCapacity - wh.availableSpace;
+        const usagePercent = wh.totalCapacity > 0 ? (used / wh.totalCapacity) * 100 : 0;
+        if (wh.availableSpace >= wh.totalCapacity) wh.status = "Available";
+        else if (usagePercent >= 85) wh.status = "Almost Full";
+        else wh.status = "Available";
+      }
+    }
+
+    writeDb(db);
+    res.json({ message: "Booking deleted successfully", booking: removed });
+  });
+
   // 6. STOCK MOVEMENT & WAREHOUSE MANAGER CONTROLS
   app.get("/api/stock-movements", (req, res) => {
     const { warehouseId, itemId } = req.query;

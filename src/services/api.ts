@@ -167,6 +167,9 @@ export const api = {
       body: JSON.stringify({ status, rejectionReason })
     }).then(res => handleResponse<WarehouseBooking>(res)),
 
+  deleteBooking: (id: string) =>
+    fetch(`${API_BASE}/bookings/${id}`, { method: 'DELETE' }).then(res => handleResponse<{ message: string }>(res)),
+
   // Stock Movements
   getStockMovements: (params?: { warehouseId?: string; itemId?: string }) => {
     const query = new URLSearchParams();
